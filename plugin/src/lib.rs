@@ -14,6 +14,10 @@ pub unsafe extern "C" fn main() {
 
 async fn test() {
     let mut socket = Socket::new("ec_database");
+    let mut socket = Socket::new("ec_database");
+    let mut socket = Socket::new("ec_database");
+    let mut socket = Socket::new("ec_database");
+    let mut socket = Socket::new("ec_database");
     let bytes = b"Bitchass!";
     socket.write(bytes).await.unwrap();
     let mut bytes2 = [0u8; 9];
