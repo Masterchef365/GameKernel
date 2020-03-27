@@ -1,4 +1,3 @@
-use futures::future::{poll_fn, Future};
 use futures::io::{AsyncRead, AsyncWrite};
 use std::io;
 use std::pin::Pin;
@@ -9,6 +8,7 @@ extern "C" {
     fn write(fd: u32, buf: *const u8, len: usize) -> i64;
     fn read(fd: u32, buf: *mut u8, len: usize) -> i64;
     fn close(fd: u32);
+    fn set_wake(fd: u32, interested: bool);
 }
 
 type PolledIO<T> = Poll<Result<T, io::Error>>;
@@ -40,7 +40,7 @@ impl Socket {
 
 impl Drop for Socket {
     fn drop(&mut self) {
-        //todo!("Something like self.close();")
+        unsafe { close(self.fd); }
     }
 }
 

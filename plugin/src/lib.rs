@@ -1,25 +1,35 @@
-use futures::executor::LocalPool;
+use futures::io::{AsyncReadExt, AsyncWriteExt};
+use futures::task::LocalSpawnExt;
 use futures::task::SpawnExt;
-use futures::io::{AsyncWriteExt, AsyncReadExt};
-use std::io;
-use std::task::Poll;
 use shared::Socket;
+
+use futures::executor::LocalPool;
+use std::future::Future;
+use once_cell::unsync::Lazy;
+
+static mut TASK_POOL: Lazy<LocalPool> = Lazy::new(LocalPool::new);
+
+fn spawn<F: Future<Output = ()> + 'static>(f: F) {
+    unsafe {
+        TASK_POOL.spawner().spawn_local(f).unwrap();
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn poll() {
+    TASK_POOL.run_until_stalled();
+}
 
 #[no_mangle]
 pub unsafe extern "C" fn main() {
-    let mut pool = LocalPool::new();
-    pool.spawner().spawn(test()).expect("Failed to spawn task");
-    pool.run();
+    spawn(test("Bitchass"));
+    spawn(test("FUck nut"));
 }
 
-async fn test() {
+async fn test(message: &str) {
     let mut socket = Socket::new("ec_database");
     let mut socket = Socket::new("ec_database");
-    let mut socket = Socket::new("ec_database");
-    let mut socket = Socket::new("ec_database");
-    let mut socket = Socket::new("ec_database");
-    let bytes = b"Bitchass!";
-    socket.write(bytes).await.unwrap();
+    socket.write(message.as_bytes()).await.unwrap();
     let mut bytes2 = [0u8; 9];
     socket.read(&mut bytes2).await.unwrap();
     socket.write(&bytes2).await.unwrap();

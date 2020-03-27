@@ -1,32 +1,56 @@
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::error::Error;
-use std::ffi::c_void;
 use std::fs::File;
-use std::io::{self, Read};
+use std::io::Read;
 use std::sync::{Arc, RwLock};
 use wasmer_runtime::{error, func, imports, instantiate, Array, Ctx, Func, Instance, WasmPtr};
 
 type Fd = u32;
 type Fallible<T> = Result<T, Box<dyn Error>>;
 
+struct Mailbox {
+    peer: String,
+}
+
+impl Mailbox {
+    pub fn new(peer: String) -> Self {
+        Self { peer }
+    }
+}
+
 struct SocketManager {
     fd_counter: Fd,
+    mailboxes: HashMap<Fd, Mailbox>,
 }
 
 impl SocketManager {
     pub fn new() -> Self {
-        Self { fd_counter: 0 }
+        Self {
+            fd_counter: 0,
+            mailboxes: HashMap::new(),
+        }
     }
 
     pub fn close(&mut self, fd: Fd) {
-        todo!("Close {}", fd)
+        self.mailboxes.remove(&fd);
     }
 
-    pub fn socket(&mut self) -> Fd {
-        let ret = self.fd_counter;
+    pub fn socket(&mut self, peer: String) -> Fd {
+        // Duplicate this socket handle if there's already a connection to that peer
+        // TODO: Maybe throw and error instead?
+        if let Some(dup) =
+            self.mailboxes
+                .iter()
+                .find_map(|(fd, mail)| if mail.peer == peer { Some(fd) } else { None })
+        {
+            return *dup;
+        }
+
+        let fd = self.fd_counter;
+        self.mailboxes.insert(fd, Mailbox::new(peer));
         self.fd_counter += 1;
-        ret
+        fd
     }
 
     pub fn read(&mut self, fd: Fd, buf: &[Cell<u8>]) -> i64 {
@@ -45,12 +69,12 @@ impl SocketManager {
     }
 }
 
-struct ModuleManager {
+struct Module {
     socket_manager: Arc<RwLock<SocketManager>>,
     instance: Instance,
 }
 
-impl ModuleManager {
+impl Module {
     pub fn from_path(path: impl AsRef<std::path::Path>) -> Fallible<Self> {
         let mut wasm = Vec::new();
         File::open(path)?.read_to_end(&mut wasm)?;
@@ -79,8 +103,14 @@ impl ModuleManager {
 
                 "socket" => {
                     let socket_manager = socket_manager.clone();
-                    func!(move |ctx: &mut Ctx, ptr: WasmPtr<u8, Array>, len: u32| {
-                        socket_manager.write().unwrap().socket()
+                    func!(move |ctx: &mut Ctx, peer: WasmPtr<u8, Array>, len: u32| {
+                        let peer = peer.deref(ctx.memory(0), 0, len).unwrap();
+                        let peer = String::from_utf8(peer.iter().map(|b| b.get()).collect());
+                        if let Ok(peer) = peer {
+                            socket_manager.write().unwrap().socket(peer)
+                        } else {
+                            todo!("Error case for non-utf8 peer address")
+                        }
                     })
                 },
 
@@ -103,14 +133,17 @@ impl ModuleManager {
 
         let mut instance = instantiate(&source, &import_object)?;
 
+        let main_func: Func = instance.func("main")?;
+        main_func.call()?;
+
         Ok(Self {
             instance,
             socket_manager,
         })
     }
 
-    pub fn run(&mut self) -> Fallible<()> {
-        let main_func: Func = self.instance.func("main")?;
+    pub fn poll_complete(&mut self) -> Fallible<()> {
+        let main_func: Func = self.instance.func("poll")?;
         main_func.call()?;
         Ok(())
     }
@@ -119,10 +152,10 @@ impl ModuleManager {
 const WASM_PATH: &str = "../plugin/target/wasm32-unknown-unknown/release/plugin.wasm";
 fn main() -> Result<(), Box<dyn Error>> {
     println!("Loading instance...");
-    let mut manager = ModuleManager::from_path(WASM_PATH)?;
+    let mut manager = Module::from_path(WASM_PATH)?;
 
     println!("Executing...");
-    manager.run()?;
+    manager.poll_complete()?;
 
     Ok(())
 }
