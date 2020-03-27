@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
 use std::io::Read;
-use wasmer_runtime::{error, func, imports, instantiate, Array, Func, WasmPtr, Ctx};
+use wasmer_runtime::{error, func, imports, instantiate, Array, Ctx, Func, WasmPtr};
 
 const WASM_PATH: &str = "../plugin/target/wasm32-unknown-unknown/release/plugin.wasm";
 fn main() -> Result<(), Box<dyn Error>> {
@@ -19,6 +19,14 @@ fn main() -> Result<(), Box<dyn Error>> {
                     print!("{}", elem.get() as char);
                 }
                 println!();
+                len as i64
+            }),
+            "socket" => func!(|ctx: &mut Ctx, ptr: WasmPtr<u8, Array>, len: u32| 0u32),
+            "read" => func!(|ctx: &mut Ctx, fd: u32, buf: WasmPtr<u8, Array>, len: u32| {
+                let buf = buf.deref(ctx.memory(0), 0, len).unwrap();
+                for byte in buf {
+                    byte.set(b'O');
+                }
                 len as i64
             }),
         },
