@@ -128,6 +128,8 @@ impl Module {
                         socket_manager.write().unwrap().close(fd)
                     })
                 },
+
+                "debug_ex" => func!(|v: u32| println!("DEBUG: {}", v)),
             },
         };
 
@@ -154,7 +156,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("Loading instance...");
     let mut manager = Module::from_path(WASM_PATH)?;
 
-    println!("Executing...");
+    println!("ONE");
+    manager.poll_complete()?;
+    println!("TWO");
+    manager.poll_complete()?;
+    println!("THREE");
     manager.poll_complete()?;
 
     Ok(())
