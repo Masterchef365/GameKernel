@@ -1,5 +1,5 @@
 use futures::io::{AsyncReadExt, AsyncWriteExt};
-use shared::{Socket, spawn};
+use shared::{spawn, Socket};
 
 #[no_mangle]
 pub extern "C" fn main() {

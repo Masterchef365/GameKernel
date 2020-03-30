@@ -1,7 +1,7 @@
-mod socket;
-pub use socket::Socket;
+pub mod socket;
+pub use socket::{Socket, SocketListener};
 mod task_pool;
 pub use task_pool::spawn;
 mod reactor;
 
-type Handle = u32;
+pub type Handle = u32;

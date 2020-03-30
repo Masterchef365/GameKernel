@@ -8,7 +8,7 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 /// Either represents an error, or a 4 byte integer
-type Maybe = i64;
+pub type Maybe = i64;
 
 extern "C" {
     fn connect(handle: Handle, peer: *const u8, len: usize) -> Maybe;
@@ -90,7 +90,7 @@ impl AsyncRead for Socket {
     }
 }
 
-struct SocketListener {
+pub struct SocketListener {
     handle: Handle,
 }
 
