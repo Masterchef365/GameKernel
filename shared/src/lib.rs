@@ -10,8 +10,9 @@ use std::task::Poll;
 
 pub type Handle = u32;
 
-/// Either represents an error, or a 4 byte integer
-pub struct Maybe(i64);
+/// Either represents an error, or a u32
+#[repr(transparent)]
+pub struct Maybe(pub i64);
 
 impl Maybe {
     pub fn errorkind(&self) -> Result<u32, io::ErrorKind> {
