@@ -24,18 +24,18 @@ impl Module {
         let import_object = imports! {
             "env" => {
                 "write" => func!(|ctx: &mut Ctx, handle: Handle, buf: WasmPtr<u8, Array>, len: u32| {
-                    let (mem, sockman) = unsafe { ctx.memory_and_data_mut::<&mut Box<dyn SocketManager>>(0) };
+                    let (mem, sockman) = unsafe { ctx.memory_and_data_mut::<Box<dyn SocketManager>>(0) };
                     sockman.write(handle, buf.deref(mem, 0, len).unwrap()).0
                 }),
 
                 "read" => func!(|ctx: &mut Ctx, handle: Handle, buf: WasmPtr<u8, Array>, len: u32| {
-                    let (mem, sockman) = unsafe { ctx.memory_and_data_mut::<&mut Box<dyn SocketManager>>(0) };
+                    let (mem, sockman) = unsafe { ctx.memory_and_data_mut::<Box<dyn SocketManager>>(0) };
                     sockman.read(handle, buf.deref(mem, 0, len).unwrap()).0
                 }),
 
                 "connect" => {
                     func!(|ctx: &mut Ctx, peer: WasmPtr<u8, Array>, len: u32, port: u16| {
-                        let (mem, sockman) = unsafe { ctx.memory_and_data_mut::<&mut Box<dyn SocketManager>>(0) };
+                        let (mem, sockman) = unsafe { ctx.memory_and_data_mut::<Box<dyn SocketManager>>(0) };
                         let peer = peer.deref(mem, 0, len).unwrap();
                         let peer = String::from_utf8(peer.iter().map(|b| b.get()).collect());
                         if let Ok(peer) = peer {
@@ -47,19 +47,21 @@ impl Module {
                 },
 
                 "listener_create" => func!(|ctx: &mut Ctx, port: u16| {
-                    let (_, sockman) = unsafe { ctx.memory_and_data_mut::<&mut Box<dyn SocketManager>>(0) };
+                    let (_, sockman) = unsafe { ctx.memory_and_data_mut::<Box<dyn SocketManager>>(0) };
                     sockman.listener_create(port).0
                 }),
 
                 "listen" => func!(|ctx: &mut Ctx, handle: Handle| {
-                    let (_, sockman) = unsafe { ctx.memory_and_data_mut::<&mut Box<dyn SocketManager>>(0) };
+                    let (_, sockman) = unsafe { ctx.memory_and_data_mut::<Box<dyn SocketManager>>(0) };
                     sockman.listen(handle).0
                 }),
 
                 "close" => func!(|ctx: &mut Ctx, handle: Handle| {
-                    let (_, sockman) = unsafe { ctx.memory_and_data_mut::<&mut Box<dyn SocketManager>>(0) };
+                    let (_, sockman) = unsafe { ctx.memory_and_data_mut::<Box<dyn SocketManager>>(0) };
                     sockman.close(handle)
                 }),
+
+                "debug" => func!(|v: u32| println!("DBG: {}", v)),
             },
         };
 
@@ -75,6 +77,7 @@ impl Module {
         self.instance.context_mut().data = sockman as *mut _ as *mut c_void;
 
         let wake_func: Func<u32, ()> = self.instance.func("wake")?;
+
         for handle in sockman.wakes() {
             wake_func.call(handle)?;
         }
