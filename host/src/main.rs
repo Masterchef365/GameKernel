@@ -2,73 +2,15 @@ use std::cell::Cell;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
-use std::io::Read;
+use std::io::{Read, self};
 use std::sync::{Arc, RwLock};
 use wasmer_runtime::{error, func, imports, instantiate, Array, Ctx, Func, Instance, WasmPtr};
 
-type Fd = u32;
-type Fallible<T> = Result<T, Box<dyn Error>>;
+use std::task::Poll;
+pub type Maybe = i64;
 
-struct Mailbox {
-    peer: String,
-}
-
-impl Mailbox {
-    pub fn new(peer: String) -> Self {
-        Self { peer }
-    }
-}
-
-struct SocketManager {
-    fd_counter: Fd,
-    mailboxes: HashMap<Fd, Mailbox>,
-}
-
-impl SocketManager {
-    pub fn new() -> Self {
-        Self {
-            fd_counter: 0,
-            mailboxes: HashMap::new(),
-        }
-    }
-
-    pub fn close(&mut self, fd: Fd) {
-        self.mailboxes.remove(&fd);
-    }
-
-    pub fn socket(&mut self, peer: String) -> Fd {
-        // Duplicate this socket handle if there's already a connection to that peer
-        // TODO: Maybe throw and error instead?
-        if let Some(dup) =
-            self.mailboxes
-                .iter()
-                .find_map(|(fd, mail)| if mail.peer == peer { Some(fd) } else { None })
-        {
-            return *dup;
-        }
-
-        let fd = self.fd_counter;
-        self.mailboxes.insert(fd, Mailbox::new(peer));
-        self.fd_counter += 1;
-        fd
-    }
-
-    pub fn read(&mut self, fd: Fd, buf: &[Cell<u8>]) -> i64 {
-        for val in buf {
-            val.set(b'W');
-        }
-        buf.len() as i64
-    }
-
-    pub fn write(&mut self, fd: Fd, buf: &[Cell<u8>]) -> i64 {
-        for val in buf {
-            print!("{}", val.get() as char);
-        }
-        println!();
-        buf.len() as i64
-    }
-}
-
+fn main() {}
+/*
 struct Module {
     socket_manager: Arc<RwLock<SocketManager>>,
     instance: Instance,
@@ -165,3 +107,4 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     Ok(())
 }
+*/
