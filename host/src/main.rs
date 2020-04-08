@@ -3,7 +3,7 @@ use std::error::Error;
 use std::ffi::c_void;
 use std::fs::File;
 use std::io::Read;
-use wasmer_runtime::{func, imports, instantiate, Array, Ctx, Func, Instance, WasmPtr};
+use wasmer_runtime::{Memory, func, imports, instantiate, Array, Ctx, Func, Instance, WasmPtr};
 
 use shared::{Handle, Maybe, SocketManager};
 
@@ -11,6 +11,11 @@ type Fallible<T> = Result<T, Box<dyn std::error::Error>>;
 
 struct Module {
     instance: Instance,
+}
+
+fn decode_string(mem: &Memory, arr: WasmPtr<u8, Array>, len: u32) -> Result<String, std::string::FromUtf8Error> {
+    let peer = arr.deref(mem, 0, len).unwrap();
+    String::from_utf8(peer.iter().map(|b| b.get()).collect())
 }
 
 impl Module {
@@ -21,47 +26,50 @@ impl Module {
     }
 
     pub fn new(source: &[u8]) -> Fallible<Self> {
+        type SM = Box<dyn SocketManager>;
         let import_object = imports! {
             "env" => {
                 "write" => func!(|ctx: &mut Ctx, handle: Handle, buf: WasmPtr<u8, Array>, len: u32| {
-                    let (mem, sockman) = unsafe { ctx.memory_and_data_mut::<Box<dyn SocketManager>>(0) };
-                    sockman.write(handle, buf.deref(mem, 0, len).unwrap()).0
+                    let (mem, sockman) = unsafe { ctx.memory_and_data_mut::<SM>(0) };
+                    Maybe::encode(sockman.write(handle, buf.deref(mem, 0, len).unwrap()))
                 }),
 
                 "read" => func!(|ctx: &mut Ctx, handle: Handle, buf: WasmPtr<u8, Array>, len: u32| {
-                    let (mem, sockman) = unsafe { ctx.memory_and_data_mut::<Box<dyn SocketManager>>(0) };
-                    sockman.read(handle, buf.deref(mem, 0, len).unwrap()).0
+                    let (mem, sockman) = unsafe { ctx.memory_and_data_mut::<SM>(0) };
+                    Maybe::encode(sockman.read(handle, buf.deref(mem, 0, len).unwrap()))
                 }),
 
                 "connect" => {
                     func!(|ctx: &mut Ctx, peer: WasmPtr<u8, Array>, len: u32, port: u16| {
-                        let (mem, sockman) = unsafe { ctx.memory_and_data_mut::<Box<dyn SocketManager>>(0) };
-                        let peer = peer.deref(mem, 0, len).unwrap();
-                        let peer = String::from_utf8(peer.iter().map(|b| b.get()).collect());
-                        if let Ok(peer) = peer {
-                            sockman.connect(&peer, port).0
+                        let (mem, sockman) = unsafe { ctx.memory_and_data_mut::<SM>(0) };
+                        if let Ok(peer) = decode_string(mem, peer, len) {
+                            Maybe::encode(sockman.connect(&peer, port))
                         } else {
-                            todo!("Error case for non-utf8 peer address")
+                            Maybe::encode(Poll::Ready(Err(io::Error::new(io::ErrorKind::InvalidData, ""))))
                         }
                     })
                 },
 
                 "listener_create" => func!(|ctx: &mut Ctx, port: u16| {
-                    let (_, sockman) = unsafe { ctx.memory_and_data_mut::<Box<dyn SocketManager>>(0) };
-                    sockman.listener_create(port).0
+                    let (_, sockman) = unsafe { ctx.memory_and_data_mut::<SM>(0) };
+                    Maybe::encode(sockman.listener_create(port))
                 }),
 
                 "listen" => func!(|ctx: &mut Ctx, handle: Handle| {
-                    let (_, sockman) = unsafe { ctx.memory_and_data_mut::<Box<dyn SocketManager>>(0) };
-                    sockman.listen(handle).0
+                    let (_, sockman) = unsafe { ctx.memory_and_data_mut::<SM>(0) };
+                    Maybe::encode(sockman.listen(handle))
                 }),
 
                 "close" => func!(|ctx: &mut Ctx, handle: Handle| {
-                    let (_, sockman) = unsafe { ctx.memory_and_data_mut::<Box<dyn SocketManager>>(0) };
+                    let (_, sockman) = unsafe { ctx.memory_and_data_mut::<SM>(0) };
                     sockman.close(handle)
                 }),
 
-                "debug" => func!(|v: u32| println!("DBG: {}", v)),
+                "debug" => func!(|ctx: &mut Ctx, peer: WasmPtr<u8, Array>, len: u32| {
+                    if let Ok(string) = decode_string(ctx.memory(0), peer, len) {
+                        println!("Module debug: {}", string);
+                    }
+                }),
             },
         };
 
@@ -88,41 +96,43 @@ impl Module {
     }
 }
 
+use std::io;
+use std::task::Poll;
+
 struct DebugSockMan;
 
 impl SocketManager for DebugSockMan {
-    fn connect(&mut self, addr: &str, port: u16) -> Maybe {
+    fn connect(&mut self, addr: &str, port: u16) -> Poll<io::Result<Handle>> {
         println!("Connect {}:{}", addr, port);
-        Maybe(0)
+        Poll::Ready(Ok(0))
     }
 
-    fn listener_create(&mut self, port: u16) -> Maybe {
+    fn listener_create(&mut self, port: u16) -> Poll<io::Result<Handle>> {
         println!("Listner create {}", port);
-        Maybe(0)
+        Poll::Ready(Ok(0))
     }
 
-    fn listen(&mut self, handle: Handle) -> Maybe {
-        println!("Listen create {}", handle);
-        Maybe(0)
+    fn listen(&mut self, handle: Handle) -> Poll<io::Result<Handle>> {
+        println!("Listen {}", handle);
+        Poll::Ready(Ok(0))
     }
 
     fn close(&mut self, handle: Handle) {
         println!("Close {}", handle);
     }
 
-    fn read(&mut self, handle: Handle, _buffer: &[Cell<u8>]) -> Maybe {
+    fn read(&mut self, handle: Handle, _buffer: &[Cell<u8>]) -> Poll<io::Result<u32>> {
         println!("Read {}", handle);
-        Maybe(0)
+        Poll::Ready(Ok(0))
     }
 
-    fn write(&mut self, handle: Handle, _buffer: &[Cell<u8>]) -> Maybe {
+    fn write(&mut self, handle: Handle, _buffer: &[Cell<u8>]) -> Poll<io::Result<u32>> {
         println!("Write {}", handle);
-        Maybe(0)
+        Poll::Ready(Ok(0))
     }
 
     fn wakes(&mut self) -> Vec<Handle> {
-        println!("Wakes");
-        Vec::new()
+        vec![]
     }
 }
 
@@ -135,7 +145,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("Running:");
     for _ in 0..10 {
         manager.wake(&mut sockman)?;
-        println!();
     }
 
     Ok(())

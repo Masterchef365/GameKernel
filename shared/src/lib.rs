@@ -24,12 +24,16 @@ impl Maybe {
         }
     }
 
-    fn into_poll(self) -> Poll<io::Result<u32>> {
+    pub fn into_poll(self) -> Poll<io::Result<u32>> {
         match self.errorkind() {
             Ok(n) => Poll::Ready(Ok(n)),
             Err(ErrorKind::WouldBlock) => Poll::Pending,
             Err(k) => Poll::Ready(Err(io::Error::from(k))),
         }
+    }
+
+    pub fn encode(poll: Poll<io::Result<u32>>) -> i64 {
+        Self::from(poll).0
     }
 }
 
