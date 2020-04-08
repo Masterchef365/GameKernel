@@ -1,4 +1,4 @@
-use shared::{Handle, Maybe};
+use libplugin::{Handle, Maybe};
 use std::cell::Cell;
 use std::ffi::c_void;
 use std::fs::File;

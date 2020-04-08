@@ -5,7 +5,7 @@ use std::error::Error;
 use std::io;
 use std::task::Poll;
 
-use shared::Handle;
+use libplugin::Handle;
 
 struct DebugSockMan;
 

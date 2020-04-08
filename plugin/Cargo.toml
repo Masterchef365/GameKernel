@@ -9,4 +9,4 @@ crate-type = ["cdylib"]
 
 [dependencies]
 futures = "0.3"
-shared = { path = "../shared" }
+libplugin = { path = "../libplugin" }

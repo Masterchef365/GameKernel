@@ -6,4 +6,4 @@ edition = "2018"
 
 [dependencies]
 wasmer-runtime = "0.14"
-shared = { path = "../shared" }
+libplugin = { path = "../libplugin" }

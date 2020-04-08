@@ -1,6 +1,6 @@
 use futures::io::{AsyncReadExt, AsyncWriteExt};
-use shared::{spawn, Socket};
-use shared::debug;
+use libplugin::{spawn, Socket};
+use libplugin::debug;
 
 #[no_mangle]
 pub extern "C" fn main() {
