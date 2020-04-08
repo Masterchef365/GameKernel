@@ -1,12 +1,12 @@
-// TODO: Feature gate these
-mod plugin;
-pub use plugin::*;
-
-mod host;
-pub use host::*;
-
+mod debug;
+mod reactor;
+mod socket;
+mod task_pool;
+pub use debug::debug;
+pub use socket::{Socket, SocketListener};
 use std::io::{self, ErrorKind};
 use std::task::Poll;
+pub use task_pool::spawn;
 
 pub type Handle = u32;
 

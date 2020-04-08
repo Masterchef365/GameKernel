@@ -1,4 +1,4 @@
-use crate::plugin::reactor;
+use crate::reactor;
 use crate::{Handle, Maybe};
 use futures::future::{self, Future};
 use futures::io::{AsyncRead, AsyncWrite};
