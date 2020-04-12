@@ -20,6 +20,7 @@ async fn server() {
 
 async fn handle_connection(socket: Socket) {
     debug("Server handling new connection");
+    futures::pending!();
     /*
     socket.write("Test".as_bytes()).await.unwrap();
     let mut bytes2 = [0u8; 9];

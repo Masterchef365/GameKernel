@@ -40,6 +40,9 @@ impl Socket {
 
         Ok(future::poll_fn(move |cx| {
             let poll = poll_ffi(unsafe { listen(handle) }, handle, cx);
+            if poll.is_ready() {
+                unsafe { close(handle); }
+            }
             poll.map(|result| {
                 result.map(|handle| Self {
                     handle: handle as Handle,

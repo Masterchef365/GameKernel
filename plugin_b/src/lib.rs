@@ -12,4 +12,5 @@ async fn connect() {
     debug("Client connecting...");
     let mut socket = Socket::connect("plugin_a", 5062).unwrap().await.unwrap();
     debug("Client connected!");
+    futures::pending!();
 }

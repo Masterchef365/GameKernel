@@ -110,14 +110,24 @@ impl WasmSocket for SocketManager {
 
     fn listen(&mut self, handle: Handle) -> Poll<io::Result<Handle>> {
         println!("Listen {}", handle);
-        if let Some(listener) = self.listeners.get_mut(&handle) {
+        let mut drop_me = false;
+        let ret = if let Some(listener) = self.listeners.get_mut(&handle) {
             match listener.nonconsumed_handles.pop_back() {
-                Some(handle) => Poll::Ready(Ok(handle)),
+                Some(handle) => {
+                    if let ListenerType::Client(_, _) = listener.listener_type {
+                        drop_me = true;
+                    }
+                    Poll::Ready(Ok(handle))
+                },
                 None => Poll::Pending,
             }
         } else {
             Poll::Ready(Err(todo!("Error out here")))
+        };
+        if drop_me {
+            self.listeners.remove(&handle);
         }
+        ret
     }
 
     fn close(&mut self, handle: Handle) {
@@ -238,7 +248,7 @@ impl Manager {
                                     handle: *peers_handle,
                                 }),
                             );
-                            peers_listener.nonconsumed_handles.push_front(us_new_handle);
+                            us_listener.nonconsumed_handles.push_front(us_new_handle);
                             us_module.socketman.wakes.push(*peers_handle);
                         }
                     }
@@ -265,7 +275,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     );
 
     println!("Running:");
-    for _ in 0..30 {
+    for _ in 0..40 {
         manager.run();
     }
 
