@@ -1,4 +1,5 @@
 mod module;
+use libplugin::Handle;
 use module::{Module, WasmSocket};
 use std::cell::Cell;
 use std::collections::{HashMap, VecDeque};
@@ -6,10 +7,7 @@ use std::error::Error;
 use std::io;
 use std::task::Poll;
 
-use libplugin::Handle;
-
 type ModuleId = String;
-type Packet = Box<[u8]>;
 type Port = u16;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -67,9 +65,7 @@ struct SocketManager {
 
 impl SocketManager {
     pub fn new() -> Self {
-        Self {
-            ..Default::default()
-        }
+        Default::default()
     }
 
     /// Create a new handle, and increment the counter
@@ -118,11 +114,11 @@ impl WasmSocket for SocketManager {
                         drop_me = true;
                     }
                     Poll::Ready(Ok(handle))
-                },
+                }
                 None => Poll::Pending,
             }
         } else {
-            Poll::Ready(Err(todo!("Error out here")))
+            todo!("Pass long some error here")
         };
         if drop_me {
             self.listeners.remove(&handle);
@@ -136,14 +132,33 @@ impl WasmSocket for SocketManager {
         self.sockets.remove(&handle);
     }
 
-    fn read(&mut self, handle: Handle, _buffer: &[Cell<u8>]) -> Poll<io::Result<u32>> {
+    fn read(&mut self, handle: Handle, buffer: &[Cell<u8>]) -> Poll<io::Result<u32>> {
         println!("Read {}", handle);
-        Poll::Ready(Ok(0))
+        if let Some(socket) = self.sockets.get_mut(&handle) {
+            let mut idx = 0;
+            while let Some(byte) = socket.inbox.pop_front() {
+                buffer[idx].set(byte);
+                idx += 1;
+            }
+            match idx {
+                0 => Poll::Pending,
+                n => Poll::Ready(Ok(n as u32)),
+            }
+        } else {
+            todo!("Pass along some error here")
+        }
     }
 
-    fn write(&mut self, handle: Handle, _buffer: &[Cell<u8>]) -> Poll<io::Result<u32>> {
+    fn write(&mut self, handle: Handle, buffer: &[Cell<u8>]) -> Poll<io::Result<u32>> {
         println!("Write {}", handle);
-        Poll::Ready(Ok(0))
+        if let Some(socket) = self.sockets.get_mut(&handle) {
+            for byte in buffer.iter() {
+                socket.outbox.push_back(byte.get());
+            }
+            Poll::Ready(Ok(buffer.len() as u32))
+        } else {
+            todo!("Pass along some error here")
+        }
     }
 
     fn wakes(&mut self) -> Vec<Handle> {
@@ -199,17 +214,24 @@ impl Manager {
         (us_id, us_module): (&ModuleId, &mut ManagedInstance),
         others: &mut HashMap<ModuleId, ManagedInstance>,
     ) {
+        // Packet routing
         for socket in &mut us_module.socketman.sockets.values_mut() {
-            if let Some(peer) = others.get_mut(&socket.peer.id) {
-                if let Some(peer_socket) = peer.socketman.sockets.get_mut(&socket.peer.handle) {
-                    if !socket.outbox.is_empty() {
+            if !socket.outbox.is_empty() {
+                println!("Transferring a message to {}", socket.peer.id);
+                if let Some(peer) = others.get_mut(&socket.peer.id) {
+                    if let Some(peer_socket) = peer.socketman.sockets.get_mut(&socket.peer.handle) {
                         peer_socket.inbox.extend(socket.outbox.drain(..));
                         peer.socketman.wakes.push(socket.peer.handle);
+                    } else {
+                        eprintln!("Err: Handle not found");
                     }
+                } else {
+                    eprintln!("Err: Peer not found");
                 }
             }
         }
 
+        // Connection handling
         let us_listeners = &mut us_module.socketman.listeners;
         let us_next_handle = &mut us_module.socketman.next_handle;
         let us_sockets = &mut us_module.socketman.sockets;
@@ -223,14 +245,19 @@ impl Manager {
 
                     for (peers_handle, peers_listener) in peer_listeners {
                         if peers_listener.listener_type == ListenerType::Server(*port) {
-                            // Connect them to us
+                            // Create handles
+                            let us_new_handle = *us_next_handle;
+                            *us_next_handle += 1;
+
                             let peer_new_handle = *peer_next_handle;
                             *peer_next_handle += 1;
+
+                            // Connect them to us
                             peer_sockets.insert(
                                 peer_new_handle,
                                 Socket::new(PeerAddress {
                                     id: us_id.clone(),
-                                    handle: *us_handle,
+                                    handle: us_new_handle,
                                 }),
                             );
                             peers_listener
@@ -239,13 +266,11 @@ impl Manager {
                             peer_module.socketman.wakes.push(*peers_handle);
 
                             // Connect us to them
-                            let us_new_handle = *us_next_handle;
-                            *us_next_handle += 1;
                             us_sockets.insert(
                                 us_new_handle,
                                 Socket::new(PeerAddress {
                                     id: peer.clone(),
-                                    handle: *peers_handle,
+                                    handle: peer_new_handle,
                                 }),
                             );
                             us_listener.nonconsumed_handles.push_front(us_new_handle);
@@ -275,7 +300,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     );
 
     println!("Running:");
-    for _ in 0..40 {
+    for _ in 0..400 {
         manager.run();
     }
 
