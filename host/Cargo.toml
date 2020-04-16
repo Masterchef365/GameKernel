@@ -7,3 +7,4 @@ edition = "2018"
 [dependencies]
 wasmer-runtime = "0.14"
 libplugin = { path = "../libplugin" }
+futures = "0.3"

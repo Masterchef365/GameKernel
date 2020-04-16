@@ -5,7 +5,6 @@ use std::ffi::c_void;
 use std::fs::File;
 use std::io;
 use std::io::Read;
-use std::marker::PhantomData;
 use std::task::Poll;
 use wasmer_runtime::{func, imports, instantiate, Array, Ctx, Func, Instance, Memory, WasmPtr};
 

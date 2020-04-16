@@ -1,5 +1,4 @@
 use crate::socket::{ListenerType, ModuleId, PeerAddress, Socket, SocketManager};
-use crate::wasm_module::WasmModule;
 use std::collections::HashMap;
 use crate::module::Module;
 
