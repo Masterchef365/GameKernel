@@ -1,9 +1,10 @@
-use crate::module::Module;
-use std::collections::HashMap;
 use crate::socket::{ListenerType, ModuleId, PeerAddress, Socket, SocketManager};
+use crate::wasm_module::WasmModule;
+use std::collections::HashMap;
+use crate::module::Module;
 
 struct ManagedInstance {
-    pub module: Module<SocketManager>,
+    pub module: Box<dyn Module>,
     pub socketman: SocketManager,
 }
 
@@ -32,7 +33,7 @@ impl Manager {
         }
     }
 
-    pub fn add_module(&mut self, name: impl Into<ModuleId>, module: Module<SocketManager>) {
+    pub fn add_module(&mut self, name: impl Into<ModuleId>, module: Box<dyn Module>) {
         self.instances.insert(
             name.into(),
             ManagedInstance {
@@ -47,11 +48,11 @@ impl Manager {
     }
 
     fn run_module(
-        (us_id, us_module): (&ModuleId, &mut ManagedInstance),
+        (id, module): (&ModuleId, &mut ManagedInstance),
         others: &mut HashMap<ModuleId, ManagedInstance>,
     ) {
         // Packet routing
-        for socket in &mut us_module.socketman.sockets.values_mut() {
+        for socket in &mut module.socketman.sockets.values_mut() {
             if !socket.outbox.is_empty() {
                 if let Some(peer) = others.get_mut(&socket.peer.id) {
                     if let Some(peer_socket) = peer.socketman.sockets.get_mut(&socket.peer.handle) {
@@ -67,12 +68,12 @@ impl Manager {
         }
 
         // Connection handling
-        let us_listeners = &mut us_module.socketman.listeners;
-        let us_next_handle = &mut us_module.socketman.next_handle;
-        let us_sockets = &mut us_module.socketman.sockets;
+        let listeners = &mut module.socketman.listeners;
+        let next_handle = &mut module.socketman.next_handle;
+        let sockets = &mut module.socketman.sockets;
 
-        for us_listener in us_listeners.values_mut() {
-            if let ListenerType::Client(peer, port) = &us_listener.listener_type {
+        for listener in listeners.values_mut() {
+            if let ListenerType::Client(peer, port) = &listener.listener_type {
                 if let Some(peer_module) = others.get_mut(peer) {
                     let peer_listeners = &mut peer_module.socketman.listeners;
                     let peer_next_handle = &mut peer_module.socketman.next_handle;
@@ -81,8 +82,8 @@ impl Manager {
                     for (peers_handle, peers_listener) in peer_listeners {
                         if peers_listener.listener_type == ListenerType::Server(*port) {
                             // Create handles
-                            let us_new_handle = *us_next_handle;
-                            *us_next_handle += 1;
+                            let new_handle = *next_handle;
+                            *next_handle += 1;
 
                             let peer_new_handle = *peer_next_handle;
                             *peer_next_handle += 1;
@@ -91,8 +92,8 @@ impl Manager {
                             peer_sockets.insert(
                                 peer_new_handle,
                                 Socket::new(PeerAddress {
-                                    id: us_id.clone(),
-                                    handle: us_new_handle,
+                                    id: id.clone(),
+                                    handle: new_handle,
                                 }),
                             );
                             peers_listener
@@ -101,21 +102,21 @@ impl Manager {
                             peer_module.socketman.wakes.push(*peers_handle);
 
                             // Connect us to them
-                            us_sockets.insert(
-                                us_new_handle,
+                            sockets.insert(
+                                new_handle,
                                 Socket::new(PeerAddress {
                                     id: peer.clone(),
                                     handle: peer_new_handle,
                                 }),
                             );
-                            us_listener.nonconsumed_handles.push_front(us_new_handle);
-                            us_module.socketman.wakes.push(*peers_handle);
+                            listener.nonconsumed_handles.push_front(new_handle);
+                            module.socketman.wakes.push(*peers_handle);
                         }
                     }
                 }
             }
         }
 
-        us_module.module.wake(&mut us_module.socketman).unwrap();
+        module.module.wake(&mut module.socketman).unwrap();
     }
 }

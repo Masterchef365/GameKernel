@@ -1,5 +1,4 @@
 use libplugin::Handle;
-use crate::module::WasmSocket;
 use std::cell::Cell;
 use std::collections::{HashMap, VecDeque};
 use std::io;
@@ -74,33 +73,28 @@ impl SocketManager {
     }
 
     /// Create a new listener and return the handle
-    fn new_listener(&mut self, listener_type: ListenerType) -> Handle {
+    pub fn new_listener(&mut self, listener_type: ListenerType) -> Handle {
         let handle = self.create_handle();
         let listener = Listener::new(listener_type);
         self.listeners.insert(handle, listener);
         handle
     }
 
-    /// Create a new socket connected to the specified peer address
-    pub fn new_socket(&mut self, peer: PeerAddress) -> Handle {
-        let handle = self.create_handle();
-        self.sockets.insert(handle, Socket::new(peer));
-        handle
-    }
-}
-
-impl WasmSocket for SocketManager {
-    fn connect(&mut self, addr: &str, port: Port) -> Poll<io::Result<Handle>> {
+    /// Initiate a new connection to a peer. Returns a handle that may be passed to listen().
+    pub fn connect(&mut self, addr: &str, port: Port) -> Poll<io::Result<Handle>> {
         Poll::Ready(Ok(
             self.new_listener(ListenerType::Client(addr.into(), port))
         ))
     }
 
-    fn listener_create(&mut self, port: Port) -> Poll<io::Result<Handle>> {
+    /// Create a new listener for a port. Calling this will create a listener that may be passed to
+    /// listen()
+    pub fn listener_create(&mut self, port: Port) -> Poll<io::Result<Handle>> {
         Poll::Ready(Ok(self.new_listener(ListenerType::Server(port))))
     }
 
-    fn listen(&mut self, handle: Handle) -> Poll<io::Result<Handle>> {
+    /// Listen for a new connection on this handle.
+    pub fn listen(&mut self, handle: Handle) -> Poll<io::Result<Handle>> {
         let mut drop_me = false;
         let ret = if let Some(listener) = self.listeners.get_mut(&handle) {
             match listener.nonconsumed_handles.pop_back() {
@@ -121,12 +115,14 @@ impl WasmSocket for SocketManager {
         ret
     }
 
-    fn close(&mut self, handle: Handle) {
+    /// Close this handle
+    pub fn close(&mut self, handle: Handle) {
         self.listeners.remove(&handle);
         self.sockets.remove(&handle);
     }
 
-    fn read(&mut self, handle: Handle, buffer: &[Cell<u8>]) -> Poll<io::Result<u32>> {
+    /// Read from this handle
+    pub fn read(&mut self, handle: Handle, buffer: &[Cell<u8>]) -> Poll<io::Result<u32>> {
         if let Some(socket) = self.sockets.get_mut(&handle) {
             let mut idx = 0;
             while let Some(byte) = socket.inbox.pop_front() {
@@ -142,7 +138,8 @@ impl WasmSocket for SocketManager {
         }
     }
 
-    fn write(&mut self, handle: Handle, buffer: &[Cell<u8>]) -> Poll<io::Result<u32>> {
+    /// Write to this handle
+    pub fn write(&mut self, handle: Handle, buffer: &[Cell<u8>]) -> Poll<io::Result<u32>> {
         if let Some(socket) = self.sockets.get_mut(&handle) {
             for byte in buffer.iter() {
                 socket.outbox.push_back(byte.get());
@@ -153,9 +150,8 @@ impl WasmSocket for SocketManager {
         }
     }
 
-    fn wakes(&mut self) -> Vec<Handle> {
+    /// Return the handles that are supposed to be awake
+    pub fn wakes(&mut self) -> Vec<Handle> {
         std::mem::take(&mut self.wakes)
     }
 }
-
-
