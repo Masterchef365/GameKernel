@@ -1,10 +1,6 @@
-use libplugin::Handle;
-use crate::module::{Module, WasmSocket};
-use std::cell::Cell;
-use std::collections::{HashMap, VecDeque};
-use std::io;
-use std::task::Poll;
-use crate::socket::{ModuleId, SocketManager, PeerAddress, Socket, ListenerType};
+use crate::module::Module;
+use std::collections::HashMap;
+use crate::socket::{ListenerType, ModuleId, PeerAddress, Socket, SocketManager};
 
 struct ManagedInstance {
     pub module: Module<SocketManager>,
@@ -75,7 +71,7 @@ impl Manager {
         let us_next_handle = &mut us_module.socketman.next_handle;
         let us_sockets = &mut us_module.socketman.sockets;
 
-        for (us_handle, us_listener) in us_listeners {
+        for us_listener in us_listeners.values_mut() {
             if let ListenerType::Client(peer, port) = &us_listener.listener_type {
                 if let Some(peer_module) = others.get_mut(peer) {
                     let peer_listeners = &mut peer_module.socketman.listeners;
@@ -123,5 +119,3 @@ impl Manager {
         us_module.module.wake(&mut us_module.socketman).unwrap();
     }
 }
-
-

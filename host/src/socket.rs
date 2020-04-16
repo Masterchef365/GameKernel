@@ -1,8 +1,7 @@
 use libplugin::Handle;
-use crate::module::{Module, WasmSocket};
+use crate::module::WasmSocket;
 use std::cell::Cell;
 use std::collections::{HashMap, VecDeque};
-use std::error::Error;
 use std::io;
 use std::task::Poll;
 

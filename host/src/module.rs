@@ -97,7 +97,7 @@ impl<S: WasmSocket> Module<S> {
 
                 "debug" => func!(|ctx: &mut Ctx, peer: WasmPtr<u8, Array>, len: u32| {
                     if let Ok(string) = decode_string(ctx.memory(0), peer, len) {
-                        //println!("Module debug: {}", string);
+                        println!("Module debug: {}", string);
                     }
                 }),
             },
