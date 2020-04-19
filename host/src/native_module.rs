@@ -1,11 +1,6 @@
-use crate::maybe::{Handle, Maybe};
 use crate::module::{Fallible, Module};
 use crate::socket::SocketManager;
 use libloading as lib;
-use std::future::Future;
-
-use std::fs::File;
-use std::io::Read;
 
 pub struct NativeModule {
     instance: lib::Library,

@@ -1,7 +1,7 @@
 use futures::io::{AsyncReadExt, AsyncWriteExt};
 use futures::stream::StreamExt;
-use libplugin::{spawn, SocketListener, Socket};
 use libplugin::debug;
+use libplugin::{spawn, Socket, SocketListener};
 
 #[no_mangle]
 pub extern "C" fn main() {
@@ -28,9 +28,9 @@ async fn handle_connection(mut socket: Socket) {
         socket.write(b"FUCK MONEY GET BITCHES").await.unwrap();
     }
     /*
-       socket.write("Test".as_bytes()).await.unwrap();
-       let mut bytes2 = [0u8; 9];
-       socket.read(&mut bytes2).await.unwrap();
-       socket.write(&bytes2).await.unwrap();
-       */
+    socket.write("Test".as_bytes()).await.unwrap();
+    let mut bytes2 = [0u8; 9];
+    socket.read(&mut bytes2).await.unwrap();
+    socket.write(&bytes2).await.unwrap();
+    */
 }

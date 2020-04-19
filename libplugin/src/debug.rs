@@ -1,6 +1,8 @@
 #[cfg(target_arch = "wasm32")]
-extern "C" {
-    pub fn debug(buf: *const u8, length: usize);
+mod ffi {
+    extern "C" {
+        pub fn debug(buf: *const u8, length: usize);
+    }
 }
 
 #[cfg(target_arch = "wasm32")]

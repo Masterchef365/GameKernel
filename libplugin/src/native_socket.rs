@@ -12,8 +12,8 @@ use game_kernel::socket::SocketManager;
 static mut SOCKET_MANAGER: Option<&'static mut SocketManager> = None;
 #[no_mangle]
 
-pub unsafe extern "C" fn set_socketmanager(sm: &'static mut SocketManager) {
-    SOCKET_MANAGER = Some(sm);
+pub extern "C" fn set_socketmanager(sm: &'static mut SocketManager) {
+    unsafe { SOCKET_MANAGER = Some(sm); }
 }
 
 fn sm() -> &'static mut SocketManager {
@@ -62,7 +62,7 @@ impl Drop for Socket {
 impl AsyncWrite for Socket {
     fn poll_write(self: Pin<&mut Self>, cx: &mut Context, buf: &[u8]) -> Poll<io::Result<usize>> {
         unsafe {
-            let buf = std::mem::transmute::<_, &[Cell<u8>]>(buf);
+            let buf = &*(buf as *const [u8] as *const [std::cell::Cell<u8>]);
             let poll = sm().write(self.handle, buf);
             if poll.is_pending() {
                 reactor::register(self.handle, cx.waker().clone());
@@ -87,7 +87,7 @@ impl AsyncRead for Socket {
         buf: &mut [u8],
     ) -> Poll<io::Result<usize>> {
         unsafe {
-            let buf = std::mem::transmute::<_, &mut [Cell<u8>]>(buf);
+            let buf = &mut *(buf as *mut [u8] as *mut [std::cell::Cell<u8>]);
             let poll = sm().read(self.handle, buf);
             if poll.is_pending() {
                 reactor::register(self.handle, cx.waker().clone());
