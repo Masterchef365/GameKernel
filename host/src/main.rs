@@ -7,7 +7,7 @@ mod wasm_module;
 use manager::Manager;
 use native_module::NativeModule;
 use std::error::Error;
-use std::fs::{create_dir, read_dir, read_link};
+use std::fs::{create_dir, read_dir};
 use std::io::ErrorKind;
 use std::path::Path;
 use wasm_module::WasmModule;
@@ -45,7 +45,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             load_by_name(file.path(), &mut manager)?;
         }
         if ftype.is_symlink() {
-            load_by_name(read_link(file.path())?, &mut manager)?;
+            load_by_name(file.path().read_link()?, &mut manager)?;
         }
     }
 

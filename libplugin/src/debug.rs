@@ -12,5 +12,5 @@ pub fn debug(s: &str) {
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn debug(s: &str) {
-    println!("{}", s);
+    println!("Module debug {}", s);
 }
