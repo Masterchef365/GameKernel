@@ -1,8 +1,6 @@
 use crate::module::{Module, Fallible};
 use crate::socket::SocketManager;
 use std::future::Future;
-use futures::task::LocalSpawnExt;
-use futures::executor::LocalPool;
 
 pub struct NativeModule {
     task_pool: LocalPool,

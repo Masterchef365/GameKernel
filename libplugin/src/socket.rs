@@ -1,5 +1,5 @@
 use crate::reactor;
-use crate::{Handle, Maybe};
+use crate::maybe::{Handle, Maybe};
 use futures::future::{self, Future};
 use futures::io::{AsyncRead, AsyncWrite};
 use futures::Stream;
@@ -7,6 +7,7 @@ use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
+#[cfg(target_arch="wasm32")]
 extern "C" {
     fn connect(peer: *const u8, len: usize, port: u16) -> Maybe;
     fn listener_create(port: u16) -> Maybe;
@@ -16,6 +17,21 @@ extern "C" {
     fn read(handle: Handle, buffer: *mut u8, len: usize) -> Maybe;
     fn write(handle: Handle, buffer: *const u8, len: usize) -> Maybe;
 }
+
+#[cfg(not(target_arch="wasm32"))]
+mod native {
+    use super::*;
+    pub unsafe fn connect(peer: *const u8, len: usize, port: u16) -> Maybe { todo!() }
+    pub unsafe fn listener_create(port: u16) -> Maybe { todo!() }
+    pub unsafe fn listen(handle: Handle) -> Maybe { todo!() }
+    pub unsafe fn close(handle: Handle) { todo!() }
+
+    pub unsafe fn read(handle: Handle, buffer: *mut u8, len: usize) -> Maybe { todo!() }
+    pub unsafe fn write(handle: Handle, buffer: *const u8, len: usize) -> Maybe { todo!() }
+}
+
+#[cfg(not(target_arch="wasm32"))]
+use native::*;
 
 fn poll_ffi(retval: Maybe, handle: Handle, cx: &Context) -> Poll<io::Result<u32>> {
     let poll = retval.into_poll();

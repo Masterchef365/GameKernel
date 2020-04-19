@@ -1,8 +1,8 @@
-use libplugin::Handle;
 use std::cell::Cell;
 use std::collections::{HashMap, VecDeque};
 use std::io;
 use std::task::Poll;
+use crate::maybe::{Handle, Maybe};
 
 pub type ModuleId = String;
 pub type Port = u16;

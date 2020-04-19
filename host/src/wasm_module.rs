@@ -1,12 +1,12 @@
 use crate::module::*;
-use crate::socket::SocketManager;
-use libplugin::{Handle, Maybe};
+use crate::socket::{SocketManager};
 use std::ffi::c_void;
 use std::fs::File;
 use std::io;
 use std::io::Read;
 use std::task::Poll;
 use wasmer_runtime::{func, imports, instantiate, Array, Ctx, Func, Instance, Memory, WasmPtr};
+use crate::maybe::{Handle, Maybe};
 
 pub struct WasmModule {
     instance: Instance,

@@ -1,12 +1,7 @@
-mod manager;
-mod module;
-mod native_module;
-mod socket;
-mod wasm_module;
-use manager::Manager;
+use host::manager::Manager;
 use std::error::Error;
 //use wasm_module::WasmModule;
-use native_module::NativeModule;
+use host::native_module::NativeModule;
 
 fn main() -> Result<(), Box<dyn Error>> {
     println!("Loading instances...");
