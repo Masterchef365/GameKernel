@@ -1,26 +1,41 @@
-use crate::module::{Module, Fallible};
+use crate::maybe::{Handle, Maybe};
+use crate::module::{Fallible, Module};
 use crate::socket::SocketManager;
+use libloading as lib;
 use std::future::Future;
 
+use std::fs::File;
+use std::io::Read;
+
 pub struct NativeModule {
-    task_pool: LocalPool,
+    instance: lib::Library,
 }
 
 impl NativeModule {
-    pub fn new() -> Self {
-        Self {
-            task_pool: LocalPool::new(),
+    pub fn from_path(path: impl AsRef<std::path::Path>) -> Fallible<Self> {
+        let instance = lib::Library::new(path.as_ref())?;
+        unsafe {
+            let main: lib::Symbol<extern "C" fn()> = instance.get(b"main")?;
+            main();
         }
-    }
-
-    pub fn spawn(&mut self, f: impl Future<Output = ()> + 'static) {
-        self.task_pool.spawner().spawn_local(f).unwrap();
+        Ok(Self { instance })
     }
 }
 
 impl Module for NativeModule {
     fn wake(&mut self, sockman: &mut SocketManager) -> Fallible<()> {
-        self.task_pool.run_until_stalled();
+        unsafe {
+            let set_socketmanager: lib::Symbol<extern "C" fn(&mut SocketManager)> =
+                self.instance.get(b"set_socketmanager")?;
+            let wake: lib::Symbol<extern "C" fn(u32)> = self.instance.get(b"wake")?;
+            let poll_func: lib::Symbol<extern "C" fn()> = self.instance.get(b"run_tasks")?;
+
+            set_socketmanager(sockman);
+            for handle in sockman.wakes() {
+                wake(handle);
+            }
+            poll_func();
+        }
         Ok(())
     }
 }
