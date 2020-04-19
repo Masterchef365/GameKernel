@@ -7,3 +7,4 @@ edition = "2018"
 [dependencies]
 wasmer-runtime = "0.14"
 libloading = "0.6"
+rental = "0.5"
