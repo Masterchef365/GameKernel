@@ -1,5 +1,5 @@
 use crate::module::{Fallible, Module};
-use crate::socket::SocketManager;
+use game_kernel::socket::SocketManager;
 use libloading as lib;
 
 pub struct Calls<'instance> {

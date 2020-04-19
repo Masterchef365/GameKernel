@@ -1,4 +1,4 @@
-use crate::socket::SocketManager;
+use game_kernel::socket::SocketManager;
 
 pub type Fallible<T> = Result<T, Box<dyn std::error::Error>>;
 

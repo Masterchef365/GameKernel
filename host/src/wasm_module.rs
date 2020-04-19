@@ -1,6 +1,6 @@
 use crate::module::*;
-use crate::socket::SocketManager;
-use crate::maybe::{Handle, Maybe};
+use game_kernel::socket::SocketManager;
+use game_kernel::maybe::{Handle, Maybe};
 use std::ffi::c_void;
 use std::fs::File;
 use std::io;

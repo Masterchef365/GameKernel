@@ -1,4 +1,4 @@
-use crate::socket::{ListenerType, ModuleId, PeerAddress, Socket, SocketManager};
+use game_kernel::socket::{ListenerType, ModuleId, PeerAddress, Socket, SocketManager};
 use std::collections::HashMap;
 use crate::module::Module;
 
