@@ -12,7 +12,7 @@ pub extern "C" fn main() {
 async fn server() {
     debug("Server started");
     let mut listener = SocketListener::new(5062).unwrap();
-    while let Some(connection) = listener.next().await {
+    while let Some(Ok(connection)) = listener.next().await {
         debug("Server got new connection");
         spawn(handle_connection(connection));
     }

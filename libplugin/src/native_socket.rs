@@ -9,11 +9,14 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use game_kernel::socket::SocketManager;
-static mut SOCKET_MANAGER: Option<&'static mut SocketManager> = None;
-#[no_mangle]
 
-pub extern "C" fn set_socketmanager(sm: &'static mut SocketManager) {
-    unsafe { SOCKET_MANAGER = Some(sm); }
+static mut SOCKET_MANAGER: Option<&'static mut SocketManager> = None;
+
+#[no_mangle]
+extern "C" fn set_socketmanager(sm: &'static mut SocketManager) {
+    unsafe {
+        SOCKET_MANAGER = Some(sm);
+    }
 }
 
 fn sm() -> &'static mut SocketManager {
@@ -114,12 +117,12 @@ impl SocketListener {
 }
 
 impl Stream for SocketListener {
-    type Item = Socket;
+    type Item = io::Result<Socket>;
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         let poll = sm().listen(self.handle);
         if poll.is_pending() {
             reactor::register(self.handle, cx.waker().clone());
         }
-        poll.map(|h| h.ok().map(|handle| Socket { handle }))
+        poll.map(|h| Some(h.map(|handle| Socket { handle })))
     }
 }

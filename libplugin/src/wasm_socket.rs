@@ -106,9 +106,9 @@ impl SocketListener {
 }
 
 impl Stream for SocketListener {
-    type Item = Socket;
+    type Item = io::Result<Socket>;
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         let ret = unsafe { listen(self.handle) };
-        poll_ffi(ret, self.handle, cx).map(|v| v.ok().map(|handle| Socket { handle }))
+        poll_ffi(ret, self.handle, cx).map(|v| Some(v.map(|handle| Socket { handle })))
     }
 }

@@ -90,6 +90,7 @@ impl SocketManager {
     /// Create a new listener for a port. Calling this will create a listener that may be passed to
     /// listen()
     pub fn listener_create(&mut self, port: Port) -> Poll<io::Result<Handle>> {
+        // TODO: Error out if there's already a listener at that port!
         Poll::Ready(Ok(self.new_listener(ListenerType::Server(port))))
     }
 
@@ -128,6 +129,9 @@ impl SocketManager {
             while let Some(byte) = socket.inbox.pop_front() {
                 buffer[idx].set(byte);
                 idx += 1;
+                if idx >= buffer.len() {
+                    break;
+                }
             }
             match idx {
                 0 => Poll::Pending,

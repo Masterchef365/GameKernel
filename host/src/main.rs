@@ -50,8 +50,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     println!("Running:");
-    for _ in 0..400 {
+    loop {
         manager.run();
+        std::thread::yield_now();
     }
 
     Ok(())
