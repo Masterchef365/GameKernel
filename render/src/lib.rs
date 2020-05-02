@@ -1,5 +1,5 @@
 use kiss3d::window::Window;
-use libplugin::{spawn, AsyncReadExt, AsyncWriteExt, Socket, SocketListener, StreamExt, yield_now};
+use libplugin::{spawn, AsyncReadExt, Socket, SocketListener, StreamExt, yield_now};
 use nalgebra::Point3;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -10,9 +10,11 @@ pub extern "C" fn main() {
     spawn(server())
 }
 
+type PointCollection = Rc<RefCell<Vec<Point3<f32>>>>;
+
 async fn server() {
     let mut listener = SocketListener::new(0).unwrap();
-    let points = Rc::new(RefCell::new(Vec::new()));
+    let points = PointCollection::default();
     points.borrow_mut().push(Point3::new(0.0, 0.0, 0.0));
     spawn(render_loop(points.clone()));
     while let Some(Ok(connection)) = listener.next().await {
@@ -20,7 +22,7 @@ async fn server() {
     }
 }
 
-async fn render_loop(points: Rc<RefCell<Vec<Point3<f32>>>>) {
+async fn render_loop(points: PointCollection) {
     let mut window = Window::new("Game kernel :: OwO");
     while window.render() {
         for point in points.borrow().iter() {
@@ -30,11 +32,12 @@ async fn render_loop(points: Rc<RefCell<Vec<Point3<f32>>>>) {
     }
 }
 
-async fn handle_connection(mut s: Socket, points: Rc<RefCell<Vec<Point3<f32>>>>) {
+async fn handle_connection(mut s: Socket, points: PointCollection) {
     let mut buf = [0u8; 20];
     println!("Renderer Handling connection");
     loop {
-        s.read(&mut buf).await.unwrap();
+        s.read_exact(&mut buf).await.unwrap();
+        println!("BUFFER");
         let msg: Point3<f32> = bincode::deserialize(&buf).unwrap();
         points.borrow_mut().push(msg);
     }

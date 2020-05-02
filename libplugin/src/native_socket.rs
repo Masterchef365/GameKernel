@@ -1,9 +1,8 @@
-use crate::maybe::{Handle, Maybe};
+use crate::maybe::Handle;
 use crate::reactor;
 use futures::future::{self, Future};
 use futures::io::{AsyncRead, AsyncWrite};
 use futures::Stream;
-use std::cell::Cell;
 use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};

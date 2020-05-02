@@ -23,7 +23,6 @@ async fn connect() {
                 ))
                 .unwrap();
                 socket.write(&buf).await.unwrap();
-                yield_now().await;
             }
         }
     }
