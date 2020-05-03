@@ -1,7 +1,7 @@
 use once_cell::unsync::Lazy;
 use std::collections::HashMap;
 use std::task::Waker;
-use crate::maybe::Handle;
+use game_kernel::socket_types::*;
 
 pub static mut REACTOR: Lazy<Reactor> = Lazy::new(Reactor::new);
 

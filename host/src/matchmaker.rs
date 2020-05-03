@@ -3,12 +3,14 @@ use crate::socket_types::*;
 use std::collections::HashMap;
 use std::sync::mpsc::{Receiver, Sender};
 
+#[derive(Debug)]
 pub struct MatchListener {
     pub module: ModuleId,
     pub handle: Handle,
     pub port: Port,
 }
 
+#[derive(Debug)]
 pub struct MatchConnector {
     pub module: ModuleId,
     pub handle: Handle,
@@ -16,6 +18,7 @@ pub struct MatchConnector {
     pub dest_port: Port,
 }
 
+#[derive(Debug)]
 pub enum MatchRequest {
     Listener(MatchListener),
     Connector(MatchConnector),
@@ -40,7 +43,7 @@ impl MatchMaker {
 
     pub fn run(&mut self) {
         for request in self.receiver.try_iter() {
-            match request {
+            match dbg!(request) {
                 MatchRequest::Listener(l) => {
                     self.listening.insert((l.module, l.port), l.handle);
                 }
@@ -54,15 +57,24 @@ impl MatchMaker {
             if let Some(listener_handle) =
                 listening.remove(&(connection.dest_module.clone(), connection.dest_port))
             {
-                let (a, b) = TwoWayConnection::pair();
-                executor_waker.send(WakeRequest {
-                    module: connection.module.clone(),
-                    body: WakeRequestBody::EndPointConnected(connection.handle, a),
-                });
-                executor_waker.send(WakeRequest {
-                    module: connection.dest_module.clone(),
-                    body: WakeRequestBody::EndPointConnected(listener_handle, b),
-                });
+                let (a, b) = TwoWayConnection::pair(
+                    connection.dest_module.clone(),
+                    listener_handle,
+                    connection.module.clone(),
+                    connection.handle,
+                );
+                executor_waker
+                    .send(WakeRequest {
+                        module: connection.module.clone(),
+                        body: WakeRequestBody::EndPointConnected(connection.handle, a),
+                    })
+                    .unwrap();
+                executor_waker
+                    .send(WakeRequest {
+                        module: connection.dest_module.clone(),
+                        body: WakeRequestBody::EndPointConnected(listener_handle, b),
+                    })
+                    .unwrap();
                 false
             } else {
                 true

@@ -1,14 +1,14 @@
 #[macro_use]
 extern crate rental;
+use game_kernel::executor::{Executor, Module};
+use game_kernel::matchmaker::MatchMaker;
 use native_module::NativeModule;
 use std::error::Error;
 use std::fs::{create_dir, read_dir};
 use std::io::ErrorKind;
 use std::path::Path;
-use wasm_module::WasmModule;
 use std::sync::mpsc::channel;
-use game_kernel::executor::{Executor, Module};
-use game_kernel::matchmaker::MatchMaker;
+use wasm_module::WasmModule;
 mod native_module;
 mod wasm_module;
 

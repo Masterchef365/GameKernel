@@ -4,7 +4,7 @@ use crate::socket_types::*;
 use std::cell::Cell;
 use std::collections::{HashMap, VecDeque};
 use std::io;
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::mpsc::Sender;
 use std::task::Poll;
 
 struct Listener {
@@ -150,8 +150,14 @@ impl SocketManager {
     /// Write to this handle
     pub fn write(&mut self, handle: Handle, buffer: &[Cell<u8>]) -> Poll<io::Result<u32>> {
         if let Some(socket) = self.sockets.get_mut(&handle) {
+            self.wake_sender
+                .send(WakeRequest {
+                    module: socket.peer.clone(),
+                    body: WakeRequestBody::Data(socket.peer_handle),
+                })
+                .unwrap();
             for byte in buffer.iter() {
-                socket.tx.send(byte.get());
+                socket.tx.send(byte.get()).unwrap();
             }
             Poll::Ready(Ok(buffer.len() as u32))
         } else {
