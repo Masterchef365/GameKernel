@@ -1,12 +1,15 @@
-use crate::module::*;
+use game_kernel::executor::Module;
 use game_kernel::socket::SocketManager;
-use game_kernel::maybe::{Handle, Maybe};
+use game_kernel::maybe::Maybe;
+use game_kernel::socket_types::*;
 use std::ffi::c_void;
 use std::fs::File;
 use std::io;
 use std::io::Read;
 use std::task::Poll;
 use wasmer_runtime::{func, imports, instantiate, Array, Ctx, Func, Instance, Memory, WasmPtr};
+
+type Fallible<T> = Result<T, Box<dyn std::error::Error>>;
 
 pub struct WasmModule {
     instance: Instance,
@@ -85,17 +88,16 @@ impl WasmModule {
 }
 
 impl Module for WasmModule {
-    fn wake(&mut self, sockman: &mut SocketManager) -> Fallible<()> {
+    fn run(&mut self, sockman: &mut SocketManager) {
         self.instance.context_mut().data = sockman as *mut _ as *mut c_void;
 
-        let wake_func: Func<u32, ()> = self.instance.func("wake")?;
+        let wake_func: Func<u32, ()> = self.instance.func("wake").unwrap();
 
         for handle in sockman.wakes() {
-            wake_func.call(handle)?;
+            wake_func.call(handle).unwrap();
         }
 
-        let poll_func: Func = self.instance.func("run_tasks")?;
-        poll_func.call()?;
-        Ok(())
+        let poll_func: Func = self.instance.func("run_tasks").unwrap();
+        poll_func.call().unwrap();
     }
 }

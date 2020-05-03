@@ -1,6 +1,8 @@
-use crate::module::{Fallible, Module};
+use game_kernel::executor::Module;
 use game_kernel::socket::SocketManager;
 use libloading as lib;
+
+type Fallible<T> = Result<T, Box<dyn std::error::Error>>;
 
 pub struct Calls<'instance> {
     pub set_socketmanager: lib::Symbol<'instance, extern "C" fn(&mut SocketManager)>,
@@ -53,7 +55,7 @@ impl NativeModule {
 }
 
 impl Module for NativeModule {
-    fn wake(&mut self, sockman: &mut SocketManager) -> Fallible<()> {
-        self.run(sockman)
+    fn run(&mut self, sockman: &mut SocketManager) {
+        self.run(sockman).unwrap();
     }
 }

@@ -1,8 +1,6 @@
 use std::io::{self, ErrorKind};
 use std::task::Poll;
 
-pub type Handle = u32;
-
 /// Either represents an error, or a u32
 #[repr(transparent)]
 pub struct Maybe(pub i64);

@@ -1,68 +1,63 @@
+use crate::executor::{WakeRequest, WakeRequestBody};
+use crate::matchmaker::{MatchConnector, MatchListener, MatchRequest};
+use crate::socket_types::*;
 use std::cell::Cell;
 use std::collections::{HashMap, VecDeque};
 use std::io;
+use std::sync::mpsc::{channel, Receiver, Sender};
 use std::task::Poll;
-use crate::maybe::Handle;
 
-pub type ModuleId = String;
-pub type Port = u16;
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct PeerAddress {
-    pub id: ModuleId,
-    pub handle: Handle,
-}
-
-pub struct Socket {
-    pub inbox: VecDeque<u8>,
-    pub outbox: VecDeque<u8>,
-    pub peer: PeerAddress,
-}
-
-impl Socket {
-    pub fn new(peer: PeerAddress) -> Self {
-        Self {
-            peer,
-            inbox: Default::default(),
-            outbox: Default::default(),
-        }
-    }
-}
-
-#[derive(PartialEq)]
-pub enum ListenerType {
-    Client(ModuleId, Port),
-    Server(Port),
-}
-
-pub struct Listener {
-    /// Handles to sockets that have been created, but haven't been exposed to the WASM yet
-    pub nonconsumed_handles: VecDeque<Handle>,
-    /// Actual type of listener and associated data
-    pub listener_type: ListenerType,
+struct Listener {
+    is_connector: bool,
+    new_connections: VecDeque<TwoWayConnection>,
 }
 
 impl Listener {
-    /// Create a new listener with the specified type and data
-    pub fn new(listener_type: ListenerType) -> Self {
+    pub fn new(is_connector: bool) -> Self {
         Self {
-            nonconsumed_handles: VecDeque::new(),
-            listener_type,
+            is_connector,
+            new_connections: VecDeque::new(),
         }
     }
 }
 
-#[derive(Default)]
 pub struct SocketManager {
-    pub listeners: HashMap<Handle, Listener>,
-    pub sockets: HashMap<Handle, Socket>,
-    pub wakes: Vec<Handle>,
-    pub next_handle: Handle,
+    listeners: HashMap<Handle, Listener>,
+    sockets: HashMap<Handle, TwoWayConnection>,
+    wakes: Vec<Handle>,
+    next_handle: Handle,
+    wake_sender: Sender<WakeRequest>,
+    match_sender: Sender<MatchRequest>,
+    id: ModuleId,
 }
 
 impl SocketManager {
-    pub fn new() -> Self {
-        Default::default()
+    pub fn wake(&mut self, wake: WakeRequestBody) {
+        match wake {
+            WakeRequestBody::EndPointConnected(handle, connection) => {
+                if let Some(listener) = self.listeners.get_mut(&handle) {
+                    listener.new_connections.push_front(connection);
+                    self.wakes.push(handle);
+                }
+            }
+            WakeRequestBody::Data(handle) => self.wakes.push(handle),
+        }
+    }
+
+    pub fn new(
+        wake_sender: Sender<WakeRequest>,
+        match_sender: Sender<MatchRequest>,
+        id: ModuleId,
+    ) -> Self {
+        Self {
+            id,
+            wake_sender,
+            match_sender,
+            wakes: Vec::new(),
+            next_handle: 0,
+            sockets: HashMap::new(),
+            listeners: HashMap::new(),
+        }
     }
 
     /// Create a new handle, and increment the counter
@@ -72,37 +67,45 @@ impl SocketManager {
         handle
     }
 
-    /// Create a new listener and return the handle
-    pub fn new_listener(&mut self, listener_type: ListenerType) -> Handle {
-        let handle = self.create_handle();
-        let listener = Listener::new(listener_type);
-        self.listeners.insert(handle, listener);
-        handle
-    }
-
     /// Initiate a new connection to a peer. Returns a handle that may be passed to listen().
     pub fn connect(&mut self, addr: &str, port: Port) -> Poll<io::Result<Handle>> {
-        Poll::Ready(Ok(
-            self.new_listener(ListenerType::Client(addr.into(), port))
-        ))
+        let handle = self.create_handle();
+        self.listeners.insert(handle, Listener::new(true));
+        let _ = self
+            .match_sender
+            .send(MatchRequest::Connector(MatchConnector {
+                dest_module: addr.into(),
+                dest_port: port,
+                handle,
+                module: self.id.clone(),
+            }));
+        Poll::Ready(Ok(handle))
     }
 
     /// Create a new listener for a port. Calling this will create a listener that may be passed to
     /// listen()
     pub fn listener_create(&mut self, port: Port) -> Poll<io::Result<Handle>> {
-        // TODO: Error out if there's already a listener at that port!
-        Poll::Ready(Ok(self.new_listener(ListenerType::Server(port))))
+        let handle = self.create_handle();
+        self.listeners.insert(handle, Listener::new(false));
+        let _ = self
+            .match_sender
+            .send(MatchRequest::Listener(MatchListener {
+                port,
+                handle,
+                module: self.id.clone(),
+            }));
+        Poll::Ready(Ok(handle))
     }
 
     /// Listen for a new connection on this handle.
     pub fn listen(&mut self, handle: Handle) -> Poll<io::Result<Handle>> {
         let mut drop_me = false;
         let ret = if let Some(listener) = self.listeners.get_mut(&handle) {
-            match listener.nonconsumed_handles.pop_back() {
-                Some(handle) => {
-                    if let ListenerType::Client(_, _) = listener.listener_type {
-                        drop_me = true;
-                    }
+            match listener.new_connections.pop_back() {
+                Some(connection) => {
+                    drop_me = listener.is_connector;
+                    let handle = self.create_handle();
+                    self.sockets.insert(handle, connection);
                     Poll::Ready(Ok(handle))
                 }
                 None => Poll::Pending,
@@ -110,9 +113,11 @@ impl SocketManager {
         } else {
             todo!("Pass long some error here")
         };
+
         if drop_me {
             self.listeners.remove(&handle);
         }
+
         ret
     }
 
@@ -126,7 +131,7 @@ impl SocketManager {
     pub fn read(&mut self, handle: Handle, buffer: &[Cell<u8>]) -> Poll<io::Result<u32>> {
         if let Some(socket) = self.sockets.get_mut(&handle) {
             let mut idx = 0;
-            while let Some(byte) = socket.inbox.pop_front() {
+            while let Ok(byte) = socket.rx.try_recv() {
                 buffer[idx].set(byte);
                 idx += 1;
                 if idx >= buffer.len() {
@@ -146,7 +151,7 @@ impl SocketManager {
     pub fn write(&mut self, handle: Handle, buffer: &[Cell<u8>]) -> Poll<io::Result<u32>> {
         if let Some(socket) = self.sockets.get_mut(&handle) {
             for byte in buffer.iter() {
-                socket.outbox.push_back(byte.get());
+                socket.tx.send(byte.get());
             }
             Poll::Ready(Ok(buffer.len() as u32))
         } else {
