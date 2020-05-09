@@ -1,15 +1,17 @@
-use game_kernel::executor::Module;
-use game_kernel::socket::SocketManager;
+use futures::channel::mpsc::{channel, Receiver, Sender};
+use futures::future::poll_fn;
+use game_kernel::matchmaker::MatchMakerRequest;
 use game_kernel::maybe::Maybe;
+use game_kernel::socket::SocketManager;
 use game_kernel::socket_types::*;
 use std::ffi::c_void;
 use std::fs::File;
 use std::io;
 use std::io::Read;
+use std::task::Context;
 use std::task::Poll;
 use wasmer_runtime::{func, imports, instantiate, Array, Ctx, Func, Instance, Memory, WasmPtr};
-
-type Fallible<T> = Result<T, Box<dyn std::error::Error>>;
+use anyhow::Result;
 
 pub struct WasmModule {
     instance: Instance,
@@ -24,31 +26,36 @@ fn decode_string(
     String::from_utf8(peer.iter().map(|b| b.get()).collect())
 }
 
+struct RuntimeSupply<'a, 'b> {
+    cx: &'a mut Context<'b>,
+    sockman: &'a mut SocketManager,
+}
+
 impl WasmModule {
-    pub fn from_path(path: impl AsRef<std::path::Path>) -> Fallible<Self> {
+    pub fn from_path(path: impl AsRef<std::path::Path>) -> Result<Self> {
         let mut wasm = Vec::new();
         File::open(path)?.read_to_end(&mut wasm)?;
         Self::new(&wasm)
     }
 
-    pub fn new(source: &[u8]) -> Fallible<Self> {
+    pub fn new(source: &[u8]) -> Result<Self> {
         let import_object = imports! {
             "env" => {
                 "write" => func!(|ctx: &mut Ctx, handle: Handle, buf: WasmPtr<u8, Array>, len: u32| {
-                    let (mem, sockman) = unsafe { ctx.memory_and_data_mut::<SocketManager>(0) };
-                    Maybe::encode(sockman.write(handle, buf.deref(mem, 0, len).unwrap()))
+                    let (mem, rt) = unsafe { ctx.memory_and_data_mut::<RuntimeSupply<'static, 'static>>(0) };
+                    Maybe::encode(rt.sockman.write(handle, buf.deref(mem, 0, len).unwrap()))
                 }),
 
                 "read" => func!(|ctx: &mut Ctx, handle: Handle, buf: WasmPtr<u8, Array>, len: u32| {
-                    let (mem, sockman) = unsafe { ctx.memory_and_data_mut::<SocketManager>(0) };
-                    Maybe::encode(sockman.read(handle, buf.deref(mem, 0, len).unwrap()))
+                    let (mem, rt) = unsafe { ctx.memory_and_data_mut::<RuntimeSupply<'static, 'static>>(0) };
+                    Maybe::encode(rt.sockman.read(handle, buf.deref(mem, 0, len).unwrap(), rt.cx))
                 }),
 
                 "connect" => {
                     func!(|ctx: &mut Ctx, peer: WasmPtr<u8, Array>, len: u32, port: u16| {
-                        let (mem, sockman) = unsafe { ctx.memory_and_data_mut::<SocketManager>(0) };
+                        let (mem, rt) = unsafe { ctx.memory_and_data_mut::<RuntimeSupply<'static, 'static>>(0) };
                         if let Ok(peer) = decode_string(mem, peer, len) {
-                            Maybe::encode(sockman.connect(&peer, port))
+                            Maybe::encode(rt.sockman.connect(&peer, port))
                         } else {
                             Maybe::encode(Poll::Ready(Err(io::Error::new(io::ErrorKind::InvalidData, ""))))
                         }
@@ -56,18 +63,18 @@ impl WasmModule {
                 },
 
                 "listener_create" => func!(|ctx: &mut Ctx, port: u16| {
-                    let (_, sockman) = unsafe { ctx.memory_and_data_mut::<SocketManager>(0) };
-                    Maybe::encode(sockman.listener_create(port))
+                    let (_, rt) = unsafe { ctx.memory_and_data_mut::<RuntimeSupply<'static, 'static>>(0) };
+                    Maybe::encode(rt.sockman.listener_create(port))
                 }),
 
                 "listen" => func!(|ctx: &mut Ctx, handle: Handle| {
-                    let (_, sockman) = unsafe { ctx.memory_and_data_mut::<SocketManager>(0) };
-                    Maybe::encode(sockman.listen(handle))
+                    let (_, rt) = unsafe { ctx.memory_and_data_mut::<RuntimeSupply<'static, 'static>>(0) };
+                    Maybe::encode(rt.sockman.listen(handle, rt.cx))
                 }),
 
                 "close" => func!(|ctx: &mut Ctx, handle: Handle| {
-                    let (_, sockman) = unsafe { ctx.memory_and_data_mut::<SocketManager>(0) };
-                    sockman.close(handle)
+                    let (_, rt) = unsafe { ctx.memory_and_data_mut::<RuntimeSupply<'static, 'static>>(0) };
+                    rt.sockman.close(handle)
                 }),
 
                 "debug" => func!(|ctx: &mut Ctx, peer: WasmPtr<u8, Array>, len: u32| {
@@ -78,17 +85,16 @@ impl WasmModule {
             },
         };
 
-        let instance = instantiate(&source, &import_object)?;
+        let instance = instantiate(&source, &import_object).unwrap();
 
         let main_func: Func = instance.func("main")?;
-        main_func.call()?;
+        main_func.call().unwrap();
 
         Ok(Self { instance })
     }
-}
 
-impl Module for WasmModule {
-    fn run(&mut self, sockman: &mut SocketManager) {
+    fn run(&mut self, sockman: &mut SocketManager, cx: &mut Context) {
+        let runtime_supply = RuntimeSupply { sockman, cx };
         self.instance.context_mut().data = sockman as *mut _ as *mut c_void;
 
         let wake_func: Func<u32, ()> = self.instance.func("wake").unwrap();
@@ -99,5 +105,16 @@ impl Module for WasmModule {
 
         let poll_func: Func = self.instance.func("run_tasks").unwrap();
         poll_func.call().unwrap();
+    }
+
+    pub async fn task(mut self, id: ModuleId, matchmaker: Sender<MatchMakerRequest>) {
+        let mut sockman = SocketManager::new(id, matchmaker);
+        loop {
+            poll_fn(|cx| {
+                self.run(&mut sockman, cx);
+                Poll::<()>::Pending
+            })
+            .await;
+        }
     }
 }

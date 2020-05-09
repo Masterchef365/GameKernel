@@ -1,3 +1,21 @@
+mod wasm_module;
+use wasm_module::WasmModule;
+use anyhow::Result;
+use futures::executor::ThreadPool;
+use futures::task::SpawnExt;
+use game_kernel::matchmaker::MatchMaker;
+fn main() -> Result<()> {
+    let pool = ThreadPool::new()?;
+    let (mm, tx) = MatchMaker::new();
+    pool.spawn(mm.task())?;
+    let plugin_a = WasmModule::from_path("/home/duncan/Projects/game_kernel/plugin_a/target/wasm32-unknown-unknown/release/plugin_a.wasm")?;
+    let plugin_b = WasmModule::from_path("/home/duncan/Projects/game_kernel/plugin_b/target/wasm32-unknown-unknown/release/plugin_b.wasm")?;
+    pool.spawn(plugin_a.task("plugin_a".into(), tx.clone()))?;
+    pool.spawn(plugin_b.task("plugin_b".into(), tx.clone()))?;
+    Ok(())
+}
+
+/*
 #[macro_use]
 extern crate rental;
 use game_kernel::executor::{Executor, Module};
@@ -9,9 +27,8 @@ use std::io::ErrorKind;
 use std::path::Path;
 use std::sync::mpsc::channel;
 use wasm_module::WasmModule;
-mod native_module;
 mod wasm_module;
-
+mod native_module;
 fn load_by_name(path: impl AsRef<Path>) -> Result<Box<dyn Module>, Box<dyn Error>> {
     let path = path.as_ref();
     match path.extension().unwrap().to_str().unwrap() {
@@ -61,3 +78,4 @@ fn main() -> Result<(), Box<dyn Error>> {
         std::thread::yield_now();
     }
 }
+*/

@@ -1,4 +1,5 @@
-use crate::maybe::{Handle, Maybe};
+use crate::socket_types::Handle;
+use crate::maybe::Maybe;
 use crate::reactor;
 use futures::future::{self, Future};
 use futures::io::{AsyncRead, AsyncWrite};

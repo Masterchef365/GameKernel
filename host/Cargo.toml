@@ -8,3 +8,5 @@ edition = "2018"
 wasmer-runtime = "0.14"
 libloading = "0.6"
 rental = "0.5"
+futures = { version = "0.3", features = ["thread-pool"] }
+anyhow = "1"

@@ -1,84 +1,63 @@
-use crate::executor::{WakeRequest, WakeRequestBody};
 use crate::socket_types::*;
 use std::collections::HashMap;
-use std::sync::mpsc::{Receiver, Sender};
+use futures::channel::mpsc::{Receiver, Sender, channel};
+use futures::stream::StreamExt;
+use futures::sink::SinkExt;
 
-#[derive(Debug)]
-pub struct MatchListener {
-    pub module: ModuleId,
-    pub handle: Handle,
+pub enum MatchMakerRequestBody {
+    Connector,
+    Listener,
+}
+
+pub struct MatchMakerRequest {
+    pub id: ModuleId,
     pub port: Port,
-}
-
-#[derive(Debug)]
-pub struct MatchConnector {
-    pub module: ModuleId,
-    pub handle: Handle,
-    pub dest_module: ModuleId,
-    pub dest_port: Port,
-}
-
-#[derive(Debug)]
-pub enum MatchRequest {
-    Listener(MatchListener),
-    Connector(MatchConnector),
+    pub body: MatchMakerRequestBody,
+    pub dest_socket: Sender<TwoWayConnection>,
 }
 
 pub struct MatchMaker {
-    listening: HashMap<(ModuleId, Port), Handle>,
-    connecting: Vec<MatchConnector>,
-    receiver: Receiver<MatchRequest>,
-    executor_waker: Sender<WakeRequest>,
+    receiver: Receiver<MatchMakerRequest>,
+    active_connections: HashMap<(ModuleId, Port), Sender<TwoWayConnection>>,
+    listeners: HashMap<(ModuleId, Port), Sender<TwoWayConnection>>,
 }
 
+pub const MATCHMAKER_MAX_REQ: usize = 90;
 impl MatchMaker {
-    pub fn new(receiver: Receiver<MatchRequest>, executor_waker: Sender<WakeRequest>) -> Self {
-        Self {
-            listening: HashMap::new(),
-            connecting: Vec::new(),
+    pub fn new() -> (Self, Sender<MatchMakerRequest>) {
+        let (sender, receiver) = channel(MATCHMAKER_MAX_REQ);
+        let instance = Self {
             receiver,
-            executor_waker,
-        }
+            active_connections: Default::default(),
+            listeners: Default::default(),
+        };
+        (instance, sender)
     }
 
-    pub fn run(&mut self) {
-        for request in self.receiver.try_iter() {
-            match dbg!(request) {
-                MatchRequest::Listener(l) => {
-                    self.listening.insert((l.module, l.port), l.handle);
-                }
-                MatchRequest::Connector(c) => self.connecting.push(c),
-            }
-        }
+    pub async fn task(mut self) {
+        while let Some(mut msg) = self.receiver.next().await {
+            let addr = (msg.id, msg.port);
 
-        let listening = &mut self.listening;
-        let executor_waker = &mut self.executor_waker;
-        self.connecting.retain(|connection| {
-            if let Some(listener_handle) =
-                listening.remove(&(connection.dest_module.clone(), connection.dest_port))
-            {
-                let (a, b) = TwoWayConnection::pair(
-                    connection.dest_module.clone(),
-                    listener_handle,
-                    connection.module.clone(),
-                    connection.handle,
-                );
-                executor_waker
-                    .send(WakeRequest {
-                        module: connection.module.clone(),
-                        body: WakeRequestBody::EndPointConnected(connection.handle, a),
-                    })
-                    .unwrap();
-                executor_waker
-                    .send(WakeRequest {
-                        module: connection.dest_module.clone(),
-                        body: WakeRequestBody::EndPointConnected(listener_handle, b),
-                    })
-                    .unwrap();
-                false
-            } else {
-                true
+            let peer = match &msg.body {
+                MatchMakerRequestBody::Listener => &mut self.active_connections,
+                MatchMakerRequestBody::Connector => &mut self.listeners,
+            }.get_mut(&addr);
+
+            if let Some(peer) = peer {
+                let (a, b) = TwoWayConnection::pair();
+                peer.send(a);
+                msg.dest_socket.send(b);
+                //TODO: If the peer was a connection, remove it!
+                //Try to send it, and if you can't then remove it from the hashmap. This means the
+                //only other end has disconnected, which will be the module.
+                continue;
             }
-        });
+
+            match msg.body {
+                MatchMakerRequestBody::Listener => &mut self.listeners,
+                MatchMakerRequestBody::Connector => &mut self.active_connections,
+            }.insert(addr, msg.dest_socket);
+        }
+        panic!("Matchmaker task ended!")
     }
 }

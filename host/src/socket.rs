@@ -1,62 +1,34 @@
-use crate::executor::{WakeRequest, WakeRequestBody};
-use crate::matchmaker::{MatchConnector, MatchListener, MatchRequest};
+use crate::matchmaker::{MatchMakerRequest, MatchMakerRequestBody, MATCHMAKER_MAX_REQ};
 use crate::socket_types::*;
+use futures::channel::mpsc::{channel, Receiver, Sender};
+use futures::sink::SinkExt;
+use futures::stream::StreamExt;
 use std::cell::Cell;
 use std::collections::{HashMap, VecDeque};
 use std::io;
-use std::sync::mpsc::Sender;
+use std::task::Context;
 use std::task::Poll;
 
-struct Listener {
-    is_connector: bool,
-    new_connections: VecDeque<TwoWayConnection>,
-}
-
-impl Listener {
-    pub fn new(is_connector: bool) -> Self {
-        Self {
-            is_connector,
-            new_connections: VecDeque::new(),
-        }
-    }
-}
-
 pub struct SocketManager {
-    listeners: HashMap<Handle, Listener>,
+    listeners: HashMap<Handle, Receiver<TwoWayConnection>>,
+    connectors: HashMap<Handle, Receiver<TwoWayConnection>>,
     sockets: HashMap<Handle, TwoWayConnection>,
+    matchmaker: Sender<MatchMakerRequest>,
     wakes: Vec<Handle>,
     next_handle: Handle,
-    wake_sender: Sender<WakeRequest>,
-    match_sender: Sender<MatchRequest>,
     id: ModuleId,
 }
 
 impl SocketManager {
-    pub fn wake(&mut self, wake: WakeRequestBody) {
-        match wake {
-            WakeRequestBody::EndPointConnected(handle, connection) => {
-                if let Some(listener) = self.listeners.get_mut(&handle) {
-                    listener.new_connections.push_front(connection);
-                    self.wakes.push(handle);
-                }
-            }
-            WakeRequestBody::Data(handle) => self.wakes.push(handle),
-        }
-    }
-
-    pub fn new(
-        wake_sender: Sender<WakeRequest>,
-        match_sender: Sender<MatchRequest>,
-        id: ModuleId,
-    ) -> Self {
+    pub fn new(id: ModuleId, matchmaker: Sender<MatchMakerRequest>) -> Self {
         Self {
             id,
-            wake_sender,
-            match_sender,
+            matchmaker,
             wakes: Vec::new(),
             next_handle: 0,
             sockets: HashMap::new(),
             listeners: HashMap::new(),
+            connectors: HashMap::new(),
         }
     }
 
@@ -66,19 +38,22 @@ impl SocketManager {
         self.next_handle += 1;
         handle
     }
+}
 
+impl SocketManager {
     /// Initiate a new connection to a peer. Returns a handle that may be passed to listen().
     pub fn connect(&mut self, addr: &str, port: Port) -> Poll<io::Result<Handle>> {
         let handle = self.create_handle();
-        self.listeners.insert(handle, Listener::new(true));
-        let _ = self
-            .match_sender
-            .send(MatchRequest::Connector(MatchConnector {
-                dest_module: addr.into(),
-                dest_port: port,
-                handle,
-                module: self.id.clone(),
-            }));
+        let (tx, rx) = channel(MATCHMAKER_MAX_REQ);
+        self.connectors.insert(handle, rx);
+        self.matchmaker
+            .try_send(MatchMakerRequest {
+                id: addr.into(),
+                port,
+                body: MatchMakerRequestBody::Connector,
+                dest_socket: tx,
+            })
+            .expect("No matchmaker");
         Poll::Ready(Ok(handle))
     }
 
@@ -86,87 +61,101 @@ impl SocketManager {
     /// listen()
     pub fn listener_create(&mut self, port: Port) -> Poll<io::Result<Handle>> {
         let handle = self.create_handle();
-        self.listeners.insert(handle, Listener::new(false));
-        let _ = self
-            .match_sender
-            .send(MatchRequest::Listener(MatchListener {
+        let (tx, rx) = channel(MATCHMAKER_MAX_REQ);
+        self.listeners.insert(handle, rx);
+        self.matchmaker
+            .try_send(MatchMakerRequest {
+                id: self.id.clone(),
                 port,
-                handle,
-                module: self.id.clone(),
-            }));
+                body: MatchMakerRequestBody::Listener,
+                dest_socket: tx,
+            })
+            .expect("No matchmaker");
         Poll::Ready(Ok(handle))
     }
 
     /// Listen for a new connection on this handle.
-    pub fn listen(&mut self, handle: Handle) -> Poll<io::Result<Handle>> {
-        let mut drop_me = false;
-        let ret = if let Some(listener) = self.listeners.get_mut(&handle) {
-            match listener.new_connections.pop_back() {
-                Some(connection) => {
-                    drop_me = listener.is_connector;
-                    let handle = self.create_handle();
-                    self.sockets.insert(handle, connection);
-                    Poll::Ready(Ok(handle))
-                }
-                None => Poll::Pending,
+    pub fn listen(&mut self, handle: Handle, cx: &mut Context) -> Poll<io::Result<Handle>> {
+        if let Some(connector) = self.connectors.get_mut(&handle) {
+            if let Some(conn) = connector.try_next().unwrap() {
+                connector.close();
+                let new_handle = self.create_handle();
+                self.sockets.insert(new_handle, conn);
+                Poll::Ready(Ok(handle))
+            } else {
+                Poll::Pending
+            }
+        } else if let Some(listener) = self.listeners.get_mut(&handle) {
+            if let Some(conn) = listener.try_next().unwrap() {
+                let new_handle = self.create_handle();
+                self.sockets.insert(new_handle, conn);
+                Poll::Ready(Ok(handle))
+            } else {
+                Poll::Pending
             }
         } else {
-            todo!("Pass long some error here")
-        };
-
-        if drop_me {
-            self.listeners.remove(&handle);
+            Poll::Ready(Err(io::Error::from(io::ErrorKind::NotFound)))
         }
-
-        ret
     }
 
     /// Close this handle
     pub fn close(&mut self, handle: Handle) {
         self.listeners.remove(&handle);
+        self.connectors.remove(&handle);
         self.sockets.remove(&handle);
     }
 
     /// Read from this handle
-    pub fn read(&mut self, handle: Handle, buffer: &[Cell<u8>]) -> Poll<io::Result<u32>> {
+    pub fn read(
+        &mut self,
+        handle: Handle,
+        buffer: &[Cell<u8>],
+        cx: &mut Context,
+    ) -> Poll<io::Result<u32>> {
         if let Some(socket) = self.sockets.get_mut(&handle) {
             let mut idx = 0;
-            while let Ok(byte) = socket.rx.try_recv() {
-                buffer[idx].set(byte);
-                idx += 1;
-                if idx >= buffer.len() {
-                    break;
+            loop {
+                let ret = socket.rx.poll_next_unpin(cx);
+                match ret {
+                    Poll::Ready(Some(byte)) => {
+                        buffer[idx].set(byte);
+                        idx += 1;
+                        cx.waker().wake_by_ref();
+                    }
+                    Poll::Ready(None) => break Poll::Ready(Ok(idx as u32)),
+                    Poll::Pending => break Poll::Pending,
                 }
             }
-            match idx {
-                0 => Poll::Pending,
-                n => Poll::Ready(Ok(n as u32)),
-            }
         } else {
-            todo!("Pass along some error here")
+            Poll::Ready(Err(io::Error::from(io::ErrorKind::NotFound)))
         }
     }
 
     /// Write to this handle
-    pub fn write(&mut self, handle: Handle, buffer: &[Cell<u8>]) -> Poll<io::Result<u32>> {
+    pub fn write(
+        &mut self,
+        handle: Handle,
+        buffer: &[Cell<u8>],
+    ) -> Poll<io::Result<u32>> {
         if let Some(socket) = self.sockets.get_mut(&handle) {
-            self.wake_sender
-                .send(WakeRequest {
-                    module: socket.peer.clone(),
-                    body: WakeRequestBody::Data(socket.peer_handle),
-                })
-                .unwrap();
             for byte in buffer.iter() {
-                socket.tx.send(byte.get()).unwrap();
+                socket.tx.try_send(byte.get()).unwrap();
             }
             Poll::Ready(Ok(buffer.len() as u32))
         } else {
-            todo!("Pass along some error here")
+            Poll::Ready(Err(io::Error::from(io::ErrorKind::NotFound)))
         }
     }
 
     /// Return the handles that are supposed to be awake
     pub fn wakes(&mut self) -> Vec<Handle> {
-        std::mem::take(&mut self.wakes)
+        // TODO: Actually implement that
+        //std::mem::take(&mut self.wakes)
+        self.sockets
+            .keys()
+            .chain(self.listeners.keys())
+            .chain(self.connectors.keys())
+            .copied()
+            .collect()
     }
 }
