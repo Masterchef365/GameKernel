@@ -78,6 +78,7 @@ impl SocketManager {
 
     /// Listen for a new connection on this handle.
     pub fn listen(&mut self, handle: Handle, cx: &mut Context) -> Poll<io::Result<Handle>> {
+        println!("POLLING HANDLE {}", handle);
         if let Some(connector) = self.connectors.get_mut(&handle) {
             let ret = connector.poll_next_unpin(cx);
             println!("CONN RET: {}", ret.is_ready());
@@ -86,7 +87,7 @@ impl SocketManager {
                     connector.close();
                     let new_handle = self.create_handle();
                     self.sockets.insert(new_handle, conn);
-                    Poll::Ready(Ok(handle))
+                    Poll::Ready(Ok(new_handle))
                 }
                 Poll::Ready(None) => Poll::Ready(Err(io::Error::from(io::ErrorKind::NotFound))),
                 Poll::Pending => Poll::Pending,
@@ -97,8 +98,9 @@ impl SocketManager {
             match ret {
                 Poll::Ready(Some(conn)) => {
                     let new_handle = self.create_handle();
+                    println!("NEW HANDLE INSERTED {}", new_handle);
                     self.sockets.insert(new_handle, conn);
-                    Poll::Ready(Ok(handle))
+                    Poll::Ready(Ok(new_handle))
                 }
                 Poll::Ready(None) => Poll::Ready(Err(io::Error::from(io::ErrorKind::NotFound))),
                 Poll::Pending => Poll::Pending,
@@ -110,6 +112,7 @@ impl SocketManager {
 
     /// Close this handle
     pub fn close(&mut self, handle: Handle) {
+        println!("CLOSED HANDLE: {}", handle);
         self.listeners.remove(&handle);
         self.connectors.remove(&handle);
         self.sockets.remove(&handle);
@@ -122,6 +125,7 @@ impl SocketManager {
         buffer: &[Cell<u8>],
         cx: &mut Context,
     ) -> Poll<io::Result<u32>> {
+        println!("READING FROM HANDLE {}", handle);
         if let Some(socket) = self.sockets.get_mut(&handle) {
             let mut idx = 0;
             loop {
@@ -137,6 +141,7 @@ impl SocketManager {
                 }
             }
         } else {
+            println!("ERROR ON READ");
             Poll::Ready(Err(io::Error::from(io::ErrorKind::NotFound)))
         }
     }

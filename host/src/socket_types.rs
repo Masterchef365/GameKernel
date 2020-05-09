@@ -6,6 +6,7 @@ pub type Handle = u32;
 
 const CHANNEL_CAP: usize = 256;
 
+// TODO: Replace with a 'ByteChannel' abstraction
 pub struct TwoWayConnection {
     pub tx: Sender<u8>,
     pub rx: Receiver<u8>,

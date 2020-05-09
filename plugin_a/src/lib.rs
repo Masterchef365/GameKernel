@@ -22,7 +22,7 @@ async fn handle_connection(mut socket: Socket) {
     debug("Server handling new connection");
     loop {
         let mut buf = [0; 512];
-        socket.read(&mut buf).await.unwrap();
+        debug(&format!("{:?}", socket.read(&mut buf).await));
         debug("SERVER GOT MESSAGE:");
         debug(&String::from_utf8(buf.to_vec()).unwrap());
         socket.write(b"FUCK MONEY GET BITCHES").await.unwrap();
