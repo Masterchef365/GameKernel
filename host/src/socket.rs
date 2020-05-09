@@ -43,6 +43,7 @@ impl SocketManager {
 impl SocketManager {
     /// Initiate a new connection to a peer. Returns a handle that may be passed to listen().
     pub fn connect(&mut self, addr: &str, port: Port) -> Poll<io::Result<Handle>> {
+        println!("CONNECT CALLED");
         let handle = self.create_handle();
         let (tx, rx) = channel(MATCHMAKER_MAX_REQ);
         self.connectors.insert(handle, rx);
@@ -60,6 +61,7 @@ impl SocketManager {
     /// Create a new listener for a port. Calling this will create a listener that may be passed to
     /// listen()
     pub fn listener_create(&mut self, port: Port) -> Poll<io::Result<Handle>> {
+        println!("CREATE CALLED");
         let handle = self.create_handle();
         let (tx, rx) = channel(MATCHMAKER_MAX_REQ);
         self.listeners.insert(handle, rx);
@@ -77,21 +79,29 @@ impl SocketManager {
     /// Listen for a new connection on this handle.
     pub fn listen(&mut self, handle: Handle, cx: &mut Context) -> Poll<io::Result<Handle>> {
         if let Some(connector) = self.connectors.get_mut(&handle) {
-            if let Some(conn) = connector.try_next().unwrap() {
-                connector.close();
-                let new_handle = self.create_handle();
-                self.sockets.insert(new_handle, conn);
-                Poll::Ready(Ok(handle))
-            } else {
-                Poll::Pending
+            let ret = connector.poll_next_unpin(cx);
+            println!("CONN RET: {}", ret.is_ready());
+            match ret {
+                Poll::Ready(Some(conn)) => {
+                    connector.close();
+                    let new_handle = self.create_handle();
+                    self.sockets.insert(new_handle, conn);
+                    Poll::Ready(Ok(handle))
+                }
+                Poll::Ready(None) => Poll::Ready(Err(io::Error::from(io::ErrorKind::NotFound))),
+                Poll::Pending => Poll::Pending,
             }
         } else if let Some(listener) = self.listeners.get_mut(&handle) {
-            if let Some(conn) = listener.try_next().unwrap() {
-                let new_handle = self.create_handle();
-                self.sockets.insert(new_handle, conn);
-                Poll::Ready(Ok(handle))
-            } else {
-                Poll::Pending
+            let ret = listener.poll_next_unpin(cx);
+            println!("LISTN RET: {}", ret.is_ready());
+            match ret {
+                Poll::Ready(Some(conn)) => {
+                    let new_handle = self.create_handle();
+                    self.sockets.insert(new_handle, conn);
+                    Poll::Ready(Ok(handle))
+                }
+                Poll::Ready(None) => Poll::Ready(Err(io::Error::from(io::ErrorKind::NotFound))),
+                Poll::Pending => Poll::Pending,
             }
         } else {
             Poll::Ready(Err(io::Error::from(io::ErrorKind::NotFound)))
@@ -132,11 +142,7 @@ impl SocketManager {
     }
 
     /// Write to this handle
-    pub fn write(
-        &mut self,
-        handle: Handle,
-        buffer: &[Cell<u8>],
-    ) -> Poll<io::Result<u32>> {
+    pub fn write(&mut self, handle: Handle, buffer: &[Cell<u8>]) -> Poll<io::Result<u32>> {
         if let Some(socket) = self.sockets.get_mut(&handle) {
             for byte in buffer.iter() {
                 socket.tx.try_send(byte.get()).unwrap();

@@ -95,7 +95,7 @@ impl WasmModule {
 
     fn run(&mut self, sockman: &mut SocketManager, cx: &mut Context) {
         let runtime_supply = RuntimeSupply { sockman, cx };
-        self.instance.context_mut().data = sockman as *mut _ as *mut c_void;
+        self.instance.context_mut().data = &runtime_supply as *const _ as *mut c_void;
 
         let wake_func: Func<u32, ()> = self.instance.func("wake").unwrap();
 
