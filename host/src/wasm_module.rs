@@ -99,7 +99,7 @@ impl WasmModule {
 
         let wake_func: Func<u32, ()> = self.instance.func("wake").unwrap();
 
-        for handle in sockman.wakes() {
+        for handle in sockman.wakes(cx) {
             wake_func.call(handle).unwrap();
         }
 

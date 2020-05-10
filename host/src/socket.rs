@@ -8,10 +8,11 @@ use std::collections::{HashMap, VecDeque};
 use std::io;
 use std::task::Context;
 use std::task::Poll;
+use std::pin::Pin;
 
 pub struct SocketManager {
-    listeners: HashMap<Handle, Receiver<TwoWayConnection>>,
-    connectors: HashMap<Handle, Receiver<TwoWayConnection>>,
+    listeners: HashMap<Handle, PeekRecv<TwoWayConnection>>,
+    connectors: HashMap<Handle, PeekRecv<TwoWayConnection>>,
     sockets: HashMap<Handle, TwoWayConnection>,
     matchmaker: Sender<MatchMakerRequest>,
     wakes: Vec<Handle>,
@@ -45,7 +46,7 @@ impl SocketManager {
     pub fn connect(&mut self, addr: &str, port: Port) -> Poll<io::Result<Handle>> {
         let new_handle = self.create_handle();
         let (tx, rx) = channel(MATCHMAKER_MAX_REQ);
-        self.connectors.insert(new_handle, rx);
+        self.connectors.insert(new_handle, rx.peekable());
         self.matchmaker
             .try_send(MatchMakerRequest {
                 id: addr.into(),
@@ -62,7 +63,7 @@ impl SocketManager {
     pub fn listener_create(&mut self, port: Port) -> Poll<io::Result<Handle>> {
         let new_handle = self.create_handle();
         let (tx, rx) = channel(MATCHMAKER_MAX_REQ);
-        self.listeners.insert(new_handle, rx);
+        self.listeners.insert(new_handle, rx.peekable());
         self.matchmaker
             .try_send(MatchMakerRequest {
                 id: self.id.clone(),
@@ -79,7 +80,7 @@ impl SocketManager {
         if let Some(connector) = self.connectors.get_mut(&handle) {
             match connector.poll_next_unpin(cx) {
                 Poll::Ready(Some(conn)) => {
-                    connector.close();
+                    connector.get_mut().close();
                     let new_handle = self.create_handle();
                     self.sockets.insert(new_handle, conn);
                     Poll::Ready(Ok(new_handle))
@@ -152,7 +153,6 @@ impl SocketManager {
         cx: &mut Context,
     ) -> Poll<io::Result<u32>> {
         if let Some(socket) = self.sockets.get_mut(&handle) {
-            use std::pin::Pin;
             let ncerror = |_| io::Error::from(io::ErrorKind::NotConnected);
 
             let mut n = 0;
@@ -180,29 +180,26 @@ impl SocketManager {
     }
 
     /// Return the handles that are supposed to be awake
-    pub fn wakes(&mut self) -> Vec<Handle> {
-        /* TODO: Implement this somehow, may require changing futures::mpsc::channel's code bit
+    pub fn wakes(&mut self, cx: &mut Context) -> Vec<Handle> {
+        // Abuse poll_peek() to determine whether there is data behind a socket/listener and wake
+        // the appropriate task(s)
         let mut wakes: Vec<Handle> = self.listeners
-            .iter()
-            .chain(self.connectors.iter())
-            .filter_map(|handle, listener| {
-                if listener.is_ready() {
+            .iter_mut()
+            .chain(self.connectors.iter_mut())
+            .filter_map(|(handle, listener)| {
+                if Pin::new(&mut *listener).poll_peek(cx).is_ready() {
                     Some(handle)
                 } else {
                     None
                 }
-            }).collect();
-        for (handle, socket) in self.sockets.iter() {
-            if socket.is_ready() {
-                wakes.push(handle);
+            })
+        .copied()
+        .collect();
+        for (handle, socket) in self.sockets.iter_mut() {
+            if Pin::new(&mut socket.rx).poll_peek(cx).is_ready() {
+                wakes.push(*handle);
             }
         }
-        */
-        self.sockets
-            .keys()
-            .chain(self.listeners.keys())
-            .chain(self.connectors.keys())
-            .copied()
-            .collect()
+        dbg!(wakes)
     }
 }
