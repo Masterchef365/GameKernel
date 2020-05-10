@@ -1,4 +1,4 @@
-use futures::channel::mpsc::{channel, Receiver, Sender};
+use futures::channel::mpsc::Sender;
 use futures::future::poll_fn;
 use game_kernel::matchmaker::MatchMakerRequest;
 use game_kernel::maybe::Maybe;

@@ -20,17 +20,12 @@ async fn server() {
 
 async fn handle_connection(mut socket: Socket) {
     debug("Server handling new connection");
+    let mut n = 0;
     loop {
         let mut buf = [0; 512];
-        debug(&format!("{:?}", socket.read(&mut buf).await));
-        debug("SERVER GOT MESSAGE:");
-        debug(&String::from_utf8(buf.to_vec()).unwrap());
-        socket.write(b"Message from server!").await.unwrap();
+        let nb = socket.read(&mut buf).await.unwrap();
+        debug(&String::from_utf8(buf[..nb].to_vec()).unwrap());
+        socket.write(format!("Message from server! {}", n).as_bytes()).await.unwrap();
+        n += 1;
     }
-    /*
-    socket.write("Test".as_bytes()).await.unwrap();
-    let mut bytes2 = [0u8; 9];
-    socket.read(&mut bytes2).await.unwrap();
-    socket.write(&bytes2).await.unwrap();
-    */
 }
