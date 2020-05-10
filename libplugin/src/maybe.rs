@@ -3,6 +3,7 @@ use std::task::Poll;
 
 /// Either represents an error, or a u32
 #[repr(transparent)]
+#[derive(Debug)]
 pub struct Maybe(pub i64);
 
 impl Maybe {

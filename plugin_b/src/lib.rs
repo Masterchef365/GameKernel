@@ -1,6 +1,10 @@
 use bincode::serialize;
+use futures::SinkExt;
+use futures::StreamExt;
 use libplugin::{debug, spawn, yield_now, AsyncReadExt, AsyncWriteExt, Socket};
 use nalgebra::Point3;
+use tokio_util::codec::{Framed, LengthDelimitedCodec};
+use tokio_util::compat::FuturesAsyncReadCompatExt;
 
 #[no_mangle]
 pub extern "C" fn main() {
@@ -10,12 +14,19 @@ pub extern "C" fn main() {
 
 async fn connect() {
     debug("Client connecting...");
-    let mut socket = Socket::connect("plugin_a", 5062).unwrap().await.unwrap();
+    let socket = Socket::connect("plugin_a", 5062).unwrap().await.unwrap();
+    let mut framed = Framed::new(socket.compat(), LengthDelimitedCodec::new());
     debug("Client Connected!...");
-    let mut buf = [0; 512];
+    let mut n = 0;
     loop {
-        socket.write(b"Message from client!").await.unwrap();
-        let n = socket.read(&mut buf).await.unwrap();
-        debug(&String::from_utf8(buf[..n].to_vec()).unwrap());
+        framed
+            .send(format!("Message from client! {}", n).into())
+            .await
+            .unwrap();
+        let bytes = framed.next().await.unwrap().unwrap();
+        if n % 1000 == 0 {
+            debug(&String::from_utf8(bytes.to_vec()).unwrap());
+        }
+        n += 1;
     }
 }

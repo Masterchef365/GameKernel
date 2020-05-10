@@ -72,11 +72,11 @@ impl AsyncWrite for Socket {
     }
 
     fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context) -> Poll<io::Result<()>> {
-        todo!("Some sort of flush() here")
+        Poll::Ready(Ok(()))
     }
 
     fn poll_close(self: Pin<&mut Self>, _cx: &mut Context) -> Poll<io::Result<()>> {
-        todo!("Call close() here")
+        Poll::Ready(Ok(()))
     }
 }
 

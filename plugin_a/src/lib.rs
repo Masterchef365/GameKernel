@@ -1,5 +1,8 @@
-use futures::io::{AsyncReadExt, AsyncWriteExt};
-use futures::stream::StreamExt;
+//use futures::io::{AsyncReadExt, AsyncWriteExt};
+use futures::StreamExt;
+use futures::SinkExt;
+use tokio_util::compat::FuturesAsyncReadCompatExt;
+use tokio_util::codec::{Framed, LengthDelimitedCodec};
 use libplugin::debug;
 use libplugin::{spawn, Socket, SocketListener};
 
@@ -18,14 +21,16 @@ async fn server() {
     }
 }
 
-async fn handle_connection(mut socket: Socket) {
+async fn handle_connection(socket: Socket) {
+    let mut framed = Framed::new(socket.compat(), LengthDelimitedCodec::new());
     debug("Server handling new connection");
-    let mut n = 0;
+    let mut n = 0u32;
     loop {
-        let mut buf = [0; 512];
-        let nb = socket.read(&mut buf).await.unwrap();
-        debug(&String::from_utf8(buf[..nb].to_vec()).unwrap());
-        socket.write(format!("Message from server! {}", n).as_bytes()).await.unwrap();
+        let bytes = framed.next().await.unwrap().unwrap();
+        if n % 1000 == 0 {
+            debug(&String::from_utf8(bytes.to_vec()).unwrap());
+        }
+        framed.send(format!("Message from server! {}", n).into()).await.unwrap();
         n += 1;
     }
 }

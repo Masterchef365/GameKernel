@@ -1,20 +1,23 @@
 mod wasm_module;
 use wasm_module::WasmModule;
 use anyhow::Result;
-use futures::executor::ThreadPool;
+//use futures::executor::ThreadPool;
 use futures::task::SpawnExt;
+use futures::executor::LocalPool;
 use game_kernel::matchmaker::MatchMaker;
 fn main() -> Result<()> {
-    let pool = ThreadPool::new()?;
+    let mut pool = LocalPool::new();
+    let spawner = pool.spawner();
 
     let (mm, tx) = MatchMaker::new();
-    pool.spawn(mm.task())?;
+    spawner.spawn(mm.task())?;
 
     let plugin_a = WasmModule::from_path("/home/duncan/Projects/game_kernel/plugin_a/target/wasm32-unknown-unknown/release/plugin_a.wasm")?;
-    pool.spawn(plugin_a.task("plugin_a".into(), tx.clone()))?;
+    spawner.spawn(plugin_a.task("plugin_a".into(), tx.clone()))?;
 
     let plugin_b = WasmModule::from_path("/home/duncan/Projects/game_kernel/plugin_b/target/wasm32-unknown-unknown/release/plugin_b.wasm")?;
-    pool.spawn(plugin_b.task("plugin_b".into(), tx.clone()))?;
+    spawner.spawn(plugin_b.task("plugin_b".into(), tx.clone()))?;
+    pool.run();
     Ok(std::thread::park())
 }
 

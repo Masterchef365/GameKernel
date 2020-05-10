@@ -10,3 +10,4 @@ crate-type = ["cdylib"]
 [dependencies]
 futures = "0.3"
 libplugin = { path = "../libplugin" }
+tokio-util = { version = "0.3", features = ["codec", "compat"] }

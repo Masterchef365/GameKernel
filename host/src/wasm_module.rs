@@ -111,7 +111,7 @@ impl WasmModule {
         let mut sockman = SocketManager::new(id.clone(), matchmaker);
         loop {
             poll_fn(|cx| {
-                println!("\n************ {} ************", id);
+                //println!("\n************ {} ************", id);
                 self.run(&mut sockman, cx);
                 Poll::<()>::Pending
             })
