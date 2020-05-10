@@ -2,3 +2,5 @@ Modules cannot be killed
 Modules can use as much memory and processing time as they'd like
 Single bytes are sent over channels (probably a huge performance hit)
 Some bug with message lengths?
+
+Try reporting the count in plugin_a every 1000 or so and don't print ****

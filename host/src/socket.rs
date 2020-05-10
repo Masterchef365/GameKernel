@@ -6,16 +6,15 @@ use futures::stream::StreamExt;
 use std::cell::Cell;
 use std::collections::{HashMap, VecDeque};
 use std::io;
+use std::pin::Pin;
 use std::task::Context;
 use std::task::Poll;
-use std::pin::Pin;
 
 pub struct SocketManager {
     listeners: HashMap<Handle, PeekRecv<TwoWayConnection>>,
     connectors: HashMap<Handle, PeekRecv<TwoWayConnection>>,
     sockets: HashMap<Handle, TwoWayConnection>,
     matchmaker: Sender<MatchMakerRequest>,
-    wakes: Vec<Handle>,
     next_handle: Handle,
     id: ModuleId,
 }
@@ -25,7 +24,6 @@ impl SocketManager {
         Self {
             id,
             matchmaker,
-            wakes: Vec::new(),
             next_handle: 0,
             sockets: HashMap::new(),
             listeners: HashMap::new(),
@@ -77,20 +75,20 @@ impl SocketManager {
 
     /// Listen for a new connection on this handle.
     pub fn listen(&mut self, handle: Handle, cx: &mut Context) -> Poll<io::Result<Handle>> {
-        if let Some(connector) = self.connectors.get_mut(&handle) {
-            match connector.poll_next_unpin(cx) {
-                Poll::Ready(Some(conn)) => {
-                    connector.get_mut().close();
-                    let new_handle = self.create_handle();
-                    self.sockets.insert(new_handle, conn);
-                    Poll::Ready(Ok(new_handle))
-                }
-                Poll::Ready(None) => Poll::Ready(Err(io::Error::from(io::ErrorKind::NotFound))),
-                Poll::Pending => Poll::Pending,
-            }
-        } else if let Some(listener) = self.listeners.get_mut(&handle) {
+        let mut is_connector = false;
+        let listeners = &mut self.listeners;
+
+        let listener = self.connectors.get_mut(&handle).or_else(|| {
+            is_connector = true;
+            listeners.get_mut(&handle)
+        });
+
+        if let Some(listener) = listener {
             match listener.poll_next_unpin(cx) {
                 Poll::Ready(Some(conn)) => {
+                    if is_connector {
+                        listener.get_mut().close();
+                    }
                     let new_handle = self.create_handle();
                     self.sockets.insert(new_handle, conn);
                     Poll::Ready(Ok(new_handle))
@@ -183,7 +181,8 @@ impl SocketManager {
     pub fn wakes(&mut self, cx: &mut Context) -> Vec<Handle> {
         // Abuse poll_peek() to determine whether there is data behind a socket/listener and wake
         // the appropriate task(s)
-        let mut wakes: Vec<Handle> = self.listeners
+        let mut wakes: Vec<Handle> = self
+            .listeners
             .iter_mut()
             .chain(self.connectors.iter_mut())
             .filter_map(|(handle, listener)| {
@@ -193,13 +192,13 @@ impl SocketManager {
                     None
                 }
             })
-        .copied()
-        .collect();
+            .copied()
+            .collect();
         for (handle, socket) in self.sockets.iter_mut() {
             if Pin::new(&mut socket.rx).poll_peek(cx).is_ready() {
                 wakes.push(*handle);
             }
         }
-        dbg!(wakes)
+        wakes
     }
 }
