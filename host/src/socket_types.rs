@@ -22,3 +22,11 @@ impl TwoWayConnection {
         )
     }
 }
+
+/*
+impl Drop for TwoWayConnection {
+    fn drop(&mut self) {
+        println!("****Dropped connection****");
+    }
+}
+*/

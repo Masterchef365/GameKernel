@@ -43,7 +43,7 @@ impl WasmModule {
             "env" => {
                 "write" => func!(|ctx: &mut Ctx, handle: Handle, buf: WasmPtr<u8, Array>, len: u32| {
                     let (mem, rt) = unsafe { ctx.memory_and_data_mut::<RuntimeSupply<'static, 'static>>(0) };
-                    Maybe::encode(rt.sockman.write(handle, buf.deref(mem, 0, len).unwrap()))
+                    Maybe::encode(rt.sockman.write(handle, buf.deref(mem, 0, len).unwrap(), rt.cx))
                 }),
 
                 "read" => func!(|ctx: &mut Ctx, handle: Handle, buf: WasmPtr<u8, Array>, len: u32| {
@@ -79,7 +79,7 @@ impl WasmModule {
 
                 "debug" => func!(|ctx: &mut Ctx, peer: WasmPtr<u8, Array>, len: u32| {
                     if let Ok(string) = decode_string(ctx.memory(0), peer, len) {
-                        println!("Module debug: {}", string);
+                        println!("--: {}", string);
                     }
                 }),
             },
@@ -104,13 +104,14 @@ impl WasmModule {
         }
 
         let poll_func: Func = self.instance.func("run_tasks").unwrap();
-        poll_func.call().unwrap();
+        poll_func.call().expect("Wasm task failure");
     }
 
     pub async fn task(mut self, id: ModuleId, matchmaker: Sender<MatchMakerRequest>) {
-        let mut sockman = SocketManager::new(id, matchmaker);
+        let mut sockman = SocketManager::new(id.clone(), matchmaker);
         loop {
             poll_fn(|cx| {
+                println!("\n************ {} ************", id);
                 self.run(&mut sockman, cx);
                 Poll::<()>::Pending
             })

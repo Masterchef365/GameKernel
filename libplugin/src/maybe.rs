@@ -12,6 +12,7 @@ impl Maybe {
             -1 => Err(ErrorKind::WouldBlock),
             -2 => Err(ErrorKind::AlreadyExists),
             -3 => Err(ErrorKind::NotFound),
+            -4 => Err(ErrorKind::NotConnected),
             _ => Err(ErrorKind::Other),
         }
     }
@@ -37,6 +38,7 @@ impl From<Poll<io::Result<u32>>> for Maybe {
             Poll::Ready(Err(e)) => match e.kind() {
                 ErrorKind::AlreadyExists => -2,
                 ErrorKind::NotFound => -3,
+                ErrorKind::NotConnected => -4,
                 _ => std::i64::MIN,
             },
         })

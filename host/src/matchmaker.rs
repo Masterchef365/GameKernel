@@ -36,7 +36,6 @@ impl MatchMaker {
 
     pub async fn task(mut self) {
         while let Some(mut msg) = self.receiver.next().await {
-            println!("MESSAGE RECEIVED");
             let addr = (msg.id, msg.port);
 
             let peer = match &msg.body {
@@ -48,7 +47,6 @@ impl MatchMaker {
                 let (a, b) = TwoWayConnection::pair();
                 peer.send(a).await.unwrap();
                 msg.dest_socket.send(b).await.unwrap();
-                println!("MATCH MADE!");
                 //TODO: If the peer was a connection, remove it!
                 //Try to send it, and if you can't then remove it from the hashmap. This means the
                 //only other end has disconnected, which will be the module.

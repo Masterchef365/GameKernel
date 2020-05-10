@@ -11,7 +11,12 @@ pub extern "C" fn main() {
 async fn connect() {
     debug("Client connecting...");
     let mut socket = Socket::connect("plugin_a", 5062).unwrap().await.unwrap();
-    debug("Client Connected!...");
-    socket.write(b"Message from client!");
-    debug("Client done");
+    let mut buf = [0; 512];
+    loop {
+        debug("Client Connected!...");
+        debug(&format!("{:?}", socket.write(b"Message from client!").await));
+        debug("Client done");
+        debug(&format!("{:?}", socket.read(&mut buf).await));
+        debug(&String::from_utf8(buf.to_vec()).unwrap());
+    }
 }

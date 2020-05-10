@@ -25,7 +25,7 @@ async fn handle_connection(mut socket: Socket) {
         debug(&format!("{:?}", socket.read(&mut buf).await));
         debug("SERVER GOT MESSAGE:");
         debug(&String::from_utf8(buf.to_vec()).unwrap());
-        socket.write(b"FUCK MONEY GET BITCHES").await.unwrap();
+        socket.write(b"Message from server!").await.unwrap();
     }
     /*
     socket.write("Test".as_bytes()).await.unwrap();
