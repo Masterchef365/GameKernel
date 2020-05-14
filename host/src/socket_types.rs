@@ -13,10 +13,9 @@ const CHANNEL_CAP: usize = 128;
 
 pub type PeekRecv<T> = Peekable<Receiver<T>>;
 
-// TODO: Replace with a 'ByteChannel' abstraction
 pub struct TwoWayConnection {
-    pub tx: Sender<u8>,
-    pub rx: PeekRecv<u8>,
+    tx: Sender<u8>,
+    rx: PeekRecv<u8>,
 }
 
 impl TwoWayConnection {
@@ -33,6 +32,10 @@ impl TwoWayConnection {
                 rx: b_rx.peekable(),
             },
         )
+    }
+
+    pub fn has_data(&mut self, cx: &mut Context) -> bool {
+        Pin::new(&mut self.rx).poll_peek(cx).is_ready()
     }
 }
 

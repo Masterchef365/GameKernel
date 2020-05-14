@@ -27,6 +27,6 @@ async fn handle_connection(socket: Socket) {
     loop {
         let bytes = framed.next().await.unwrap().unwrap();
         debug(&String::from_utf8(bytes.to_vec()).unwrap());
-        framed.send("Message from server!".into()).await.unwrap();
+        framed.send(bytes.into()).await.unwrap();
     }
 }

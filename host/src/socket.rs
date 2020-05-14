@@ -164,7 +164,7 @@ impl SocketManager {
             .copied()
             .collect();
         for (handle, socket) in self.sockets.iter_mut() {
-            if Pin::new(&mut socket.rx).poll_peek(cx).is_ready() {
+            if socket.has_data(cx) {
                 wakes.push(*handle);
             }
         }
