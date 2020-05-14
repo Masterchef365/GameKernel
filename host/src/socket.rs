@@ -1,4 +1,4 @@
-use crate::matchmaker::{MatchMakerRequest, MatchMakerRequestBody, MATCHMAKER_MAX_REQ};
+use crate::matchmaker::{Request, ConnType, MATCHMAKER_MAX_REQ};
 use crate::socket_types::*;
 use futures::channel::mpsc::{channel, Receiver, Sender};
 use futures::sink::{Sink, SinkExt};
@@ -14,13 +14,13 @@ pub struct SocketManager {
     listeners: HashMap<Handle, PeekRecv<TwoWayConnection>>,
     connectors: HashMap<Handle, PeekRecv<TwoWayConnection>>,
     sockets: HashMap<Handle, TwoWayConnection>,
-    matchmaker: Sender<MatchMakerRequest>,
+    matchmaker: Sender<Request>,
     next_handle: Handle,
     id: ModuleId,
 }
 
 impl SocketManager {
-    pub fn new(id: ModuleId, matchmaker: Sender<MatchMakerRequest>) -> Self {
+    pub fn new(id: ModuleId, matchmaker: Sender<Request>) -> Self {
         Self {
             id,
             matchmaker,
@@ -46,10 +46,10 @@ impl SocketManager {
         let (tx, rx) = channel(MATCHMAKER_MAX_REQ);
         self.connectors.insert(new_handle, rx.peekable());
         self.matchmaker
-            .try_send(MatchMakerRequest {
+            .try_send(Request {
                 id: addr.into(),
                 port,
-                body: MatchMakerRequestBody::Connector,
+                conn_type: ConnType::Connector,
                 dest_socket: tx,
             })
             .expect("No matchmaker");
@@ -63,10 +63,10 @@ impl SocketManager {
         let (tx, rx) = channel(MATCHMAKER_MAX_REQ);
         self.listeners.insert(new_handle, rx.peekable());
         self.matchmaker
-            .try_send(MatchMakerRequest {
+            .try_send(Request {
                 id: self.id.clone(),
                 port,
-                body: MatchMakerRequestBody::Listener,
+                conn_type: ConnType::Listener,
                 dest_socket: tx,
             })
             .expect("No matchmaker");
@@ -116,28 +116,15 @@ impl SocketManager {
         cx: &mut Context,
     ) -> Poll<io::Result<u32>> {
         if let Some(socket) = self.sockets.get_mut(&handle) {
-            let mut idx = 0;
-            loop {
-                match socket.rx.poll_next_unpin(cx) {
-                    Poll::Ready(Some(byte)) => {
-                        buffer[idx].set(byte);
-                        idx += 1;
-                        if idx >= buffer.len() {
-                            break Poll::Ready(Ok(idx as u32));
-                        }
-                    }
-                    Poll::Ready(None) => {
-                        break Poll::Ready(Err(io::Error::from(io::ErrorKind::NotConnected)))
-                    }
-                    Poll::Pending => {
-                        break if idx == 0 {
-                            Poll::Pending
-                        } else {
-                            Poll::Ready(Ok(idx as u32))
-                        };
-                    }
+            let mut tmp = vec![0u8; buffer.len()];
+            use futures::io::AsyncRead;
+            let n = Pin::new(socket).poll_read(cx, &mut tmp);
+            if let Poll::Ready(Ok(n)) = n {
+                for i in 0..n {
+                    buffer[i].set(tmp[i]);
                 }
             }
+            n.map(|n| n.map(|n| n as u32))
         } else {
             Poll::Ready(Err(io::Error::from(io::ErrorKind::NotFound)))
         }
@@ -151,27 +138,9 @@ impl SocketManager {
         cx: &mut Context,
     ) -> Poll<io::Result<u32>> {
         if let Some(socket) = self.sockets.get_mut(&handle) {
-            let ncerror = |_| io::Error::from(io::ErrorKind::NotConnected);
-
-            let mut n = 0;
-            for byte in buffer.iter() {
-                let ready = Pin::new(&mut socket.tx)
-                    .poll_ready(cx)
-                    .map(|v| v.map_err(ncerror))?;
-                if ready.is_pending() {
-                    break;
-                }
-                Pin::new(&mut socket.tx)
-                    .start_send(byte.get())
-                    .map_err(ncerror)?;
-                n += 1;
-            }
-
-            if n > 0 {
-                Poll::Ready(Ok(n))
-            } else {
-                Poll::Pending
-            }
+            use futures::io::AsyncWrite;
+            let tmp: Vec<_> = buffer.iter().map(|v| v.get()).collect();
+            Pin::new(socket).poll_write(cx, &tmp).map(|n| n.map(|n| n as u32))
         } else {
             Poll::Ready(Err(io::Error::from(io::ErrorKind::NotFound)))
         }

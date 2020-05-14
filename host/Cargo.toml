@@ -10,3 +10,4 @@ libloading = "0.6"
 rental = "0.5"
 futures = { version = "0.3", features = ["thread-pool"] }
 anyhow = "1"
+tokio-util = { version = "0.3", features = ["codec", "compat"] }

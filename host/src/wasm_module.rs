@@ -1,6 +1,7 @@
+use anyhow::Result;
 use futures::channel::mpsc::Sender;
 use futures::future::poll_fn;
-use game_kernel::matchmaker::MatchMakerRequest;
+use game_kernel::matchmaker::Request;
 use game_kernel::maybe::Maybe;
 use game_kernel::socket::SocketManager;
 use game_kernel::socket_types::*;
@@ -11,7 +12,6 @@ use std::io::Read;
 use std::task::Context;
 use std::task::Poll;
 use wasmer_runtime::{func, imports, instantiate, Array, Ctx, Func, Instance, Memory, WasmPtr};
-use anyhow::Result;
 
 pub struct WasmModule {
     instance: Instance,
@@ -57,7 +57,7 @@ impl WasmModule {
                         if let Ok(peer) = decode_string(mem, peer, len) {
                             Maybe::encode(rt.sockman.connect(&peer, port))
                         } else {
-                            Maybe::encode(Poll::Ready(Err(io::Error::new(io::ErrorKind::InvalidData, ""))))
+                            Maybe::encode(Poll::Ready(Err(io::Error::from(io::ErrorKind::InvalidData))))
                         }
                     })
                 },
@@ -107,11 +107,11 @@ impl WasmModule {
         poll_func.call().expect("Wasm task failure");
     }
 
-    pub async fn task(mut self, id: ModuleId, matchmaker: Sender<MatchMakerRequest>) {
+    pub async fn task(mut self, id: ModuleId, matchmaker: Sender<Request>) {
         let mut sockman = SocketManager::new(id.clone(), matchmaker);
         loop {
             poll_fn(|cx| {
-                //println!("\n************ {} ************", id);
+                println!("\n************ {} ************", id);
                 self.run(&mut sockman, cx);
                 Poll::<()>::Pending
             })

@@ -17,16 +17,12 @@ async fn connect() {
     let socket = Socket::connect("plugin_a", 5062).unwrap().await.unwrap();
     let mut framed = Framed::new(socket.compat(), LengthDelimitedCodec::new());
     debug("Client Connected!...");
-    let mut n = 0;
     loop {
         framed
-            .send(format!("Message from client! {}", n).into())
+            .send("Message from client!".into())
             .await
             .unwrap();
         let bytes = framed.next().await.unwrap().unwrap();
-        if n % 1000 == 0 {
-            debug(&String::from_utf8(bytes.to_vec()).unwrap());
-        }
-        n += 1;
+        debug(&String::from_utf8(bytes.to_vec()).unwrap());
     }
 }

@@ -24,13 +24,9 @@ async fn server() {
 async fn handle_connection(socket: Socket) {
     let mut framed = Framed::new(socket.compat(), LengthDelimitedCodec::new());
     debug("Server handling new connection");
-    let mut n = 0u32;
     loop {
         let bytes = framed.next().await.unwrap().unwrap();
-        if n % 1000 == 0 {
-            debug(&String::from_utf8(bytes.to_vec()).unwrap());
-        }
-        framed.send(format!("Message from server! {}", n).into()).await.unwrap();
-        n += 1;
+        debug(&String::from_utf8(bytes.to_vec()).unwrap());
+        framed.send("Message from server!".into()).await.unwrap();
     }
 }
