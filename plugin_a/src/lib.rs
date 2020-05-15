@@ -1,14 +1,17 @@
 //use futures::io::{AsyncReadExt, AsyncWriteExt};
-use futures::StreamExt;
 use futures::SinkExt;
-use tokio_util::compat::FuturesAsyncReadCompatExt;
-use tokio_util::codec::{Framed, LengthDelimitedCodec};
+use futures::StreamExt;
 use libplugin::debug;
 use libplugin::{spawn, Socket, SocketListener};
+use tokio_util::codec::{Framed, LengthDelimitedCodec};
+use tokio_util::compat::FuturesAsyncReadCompatExt;
 
 #[no_mangle]
 pub extern "C" fn main() {
     debug("Server init!");
+    std::panic::set_hook(Box::new(|info| {
+        debug(&format!("{}", info));
+    }));
     spawn(server());
 }
 

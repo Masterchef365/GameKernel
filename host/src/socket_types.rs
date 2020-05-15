@@ -16,6 +16,7 @@ pub type PeekRecv<T> = Peekable<Receiver<T>>;
 pub struct TwoWayConnection {
     tx: Sender<u8>,
     rx: PeekRecv<u8>,
+    is_a: bool,
 }
 
 impl TwoWayConnection {
@@ -26,10 +27,12 @@ impl TwoWayConnection {
             TwoWayConnection {
                 tx: a_tx,
                 rx: a_rx.peekable(),
+                is_a: true,
             },
             TwoWayConnection {
                 tx: b_tx,
                 rx: b_rx.peekable(),
+                is_a: false,
             },
         )
     }

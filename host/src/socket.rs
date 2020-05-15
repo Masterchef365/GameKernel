@@ -1,4 +1,4 @@
-use crate::matchmaker::{Request, ConnType, MATCHMAKER_MAX_REQ};
+use crate::matchmaker::{ConnType, Request, MATCHMAKER_MAX_REQ};
 use crate::socket_types::*;
 use futures::channel::mpsc::{channel, Receiver, Sender};
 use futures::sink::{Sink, SinkExt};
@@ -118,13 +118,13 @@ impl SocketManager {
         if let Some(socket) = self.sockets.get_mut(&handle) {
             let mut tmp = vec![0u8; buffer.len()];
             use futures::io::AsyncRead;
-            let n = Pin::new(socket).poll_read(cx, &mut tmp);
-            if let Poll::Ready(Ok(n)) = n {
+            let res = Pin::new(socket).poll_read(cx, &mut tmp);
+            if let Poll::Ready(Ok(n)) = res {
                 for i in 0..n {
                     buffer[i].set(tmp[i]);
                 }
             }
-            n.map(|n| n.map(|n| n as u32))
+            res.map(|n| n.map(|n| n as u32))
         } else {
             Poll::Ready(Err(io::Error::from(io::ErrorKind::NotFound)))
         }
@@ -140,7 +140,9 @@ impl SocketManager {
         if let Some(socket) = self.sockets.get_mut(&handle) {
             use futures::io::AsyncWrite;
             let tmp: Vec<_> = buffer.iter().map(|v| v.get()).collect();
-            Pin::new(socket).poll_write(cx, &tmp).map(|n| n.map(|n| n as u32))
+            Pin::new(socket)
+                .poll_write(cx, &tmp)
+                .map(|n| n.map(|n| n as u32))
         } else {
             Poll::Ready(Err(io::Error::from(io::ErrorKind::NotFound)))
         }

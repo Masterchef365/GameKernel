@@ -76,6 +76,7 @@ impl AsyncWrite for Socket {
     }
 
     fn poll_close(self: Pin<&mut Self>, _cx: &mut Context) -> Poll<io::Result<()>> {
+        unsafe { close(self.handle) };
         Poll::Ready(Ok(()))
     }
 }

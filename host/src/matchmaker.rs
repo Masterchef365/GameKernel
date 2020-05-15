@@ -53,6 +53,7 @@ pub struct Request {
 }
 
 /// Connection type (listener, connector)
+#[derive(Debug)]
 pub enum ConnType {
     Connector,
     Listener,
@@ -61,7 +62,7 @@ pub enum ConnType {
 /// Connection facilitator
 pub struct MatchMaker {
     receiver: Receiver<Request>,
-    active_connections: HashMap<(ModuleId, Port), Sender<TwoWayConnection>>,
+    active_connections: HashMap<(ModuleId, Port), Vec<Sender<TwoWayConnection>>>,
     listeners: HashMap<(ModuleId, Port), Sender<TwoWayConnection>>,
 }
 
@@ -84,26 +85,38 @@ impl MatchMaker {
         while let Some(mut msg) = self.receiver.next().await {
             let addr = (msg.id, msg.port);
 
-            let peer = match &msg.conn_type {
-                ConnType::Listener => &mut self.active_connections,
-                ConnType::Connector => &mut self.listeners,
-            }
-            .get_mut(&addr);
-
-            if let Some(peer) = peer {
-                let (a, b) = TwoWayConnection::pair();
-                peer.send(a).await.unwrap();
-                msg.dest_socket.send(b).await.unwrap();
-                //TODO: Try to send it, and if you can't then remove it from the hashmap. This means the
-                //only other end has disconnected.
-                continue;
-            }
-
+            //TODO: Try to send it, and if you can't then remove it from the hashmap. This means the
+            //only other end has disconnected.
             match msg.conn_type {
-                ConnType::Listener => &mut self.listeners,
-                ConnType::Connector => &mut self.active_connections,
+                ConnType::Connector => {
+                    if let Some(listener) = self.listeners.get_mut(&addr) {
+                        let (a, b) = TwoWayConnection::pair();
+                        listener.send(a).await.expect("Peer disappeared");
+                        msg.dest_socket
+                            .send(b)
+                            .await
+                            .expect("Destination socket disappeared");
+                    } else {
+                        self.active_connections
+                            .entry(addr)
+                            .or_insert(vec![])
+                            .push(msg.dest_socket)
+                    }
+                }
+                ConnType::Listener => {
+                    if let Some(connector_list) = self.active_connections.get_mut(&addr) {
+                        for mut connector in connector_list.drain(..) {
+                            let (a, b) = TwoWayConnection::pair();
+                            connector.send(a).await.expect("Peer disappeared");
+                            msg.dest_socket
+                                .send(b)
+                                .await
+                                .expect("Destination socket disappeared");
+                        }
+                    }
+                    self.listeners.insert(addr, msg.dest_socket);
+                }
             }
-            .insert(addr, msg.dest_socket);
         }
         panic!("Matchmaker task ended!")
     }

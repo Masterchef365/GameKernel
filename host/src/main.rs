@@ -26,7 +26,7 @@ fn main() -> Result<()> {
 }
 
 async fn test_task(mut mm: matchmaker::MMSender, name: String) {
-    let mut conn = matchmaker::connect("plugin_a", 5062, &mut mm).await.unwrap().unwrap();
+    let mut conn = matchmaker::connect("plugin_a", 5062, &mut mm).await.expect("No option").expect("No socket");
     use tokio_util::codec::{Framed, LengthDelimitedCodec};
     use tokio_util::compat::FuturesAsyncReadCompatExt;
     let mut socket = Framed::new(conn.compat(), LengthDelimitedCodec::new());

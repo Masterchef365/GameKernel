@@ -79,7 +79,7 @@ impl WasmModule {
 
                 "debug" => func!(|ctx: &mut Ctx, peer: WasmPtr<u8, Array>, len: u32| {
                     if let Ok(string) = decode_string(ctx.memory(0), peer, len) {
-                        println!("--: {}", string);
+                        println!("Module debug: {}", string);
                     }
                 }),
             },
@@ -111,8 +111,9 @@ impl WasmModule {
         let mut sockman = SocketManager::new(id.clone(), matchmaker);
         loop {
             poll_fn(|cx| {
-                println!("\n************ {} ************", id);
+                //eprintln!("\n************ {} ************", id);
                 self.run(&mut sockman, cx);
+                //eprintln!("\n************ END {} ************", id);
                 Poll::<()>::Pending
             })
             .await;
