@@ -29,15 +29,15 @@ pub async fn create_listener(
     id: impl Into<ModuleId>,
     port: Port,
     matchmaker: &mut MMSender,
-) -> impl Stream<Item = TwoWayConnection> {
-    let (dest_socket, mut socket) = channel(MATCHMAKER_MAX_REQ);
+) -> Result<impl Stream<Item = TwoWayConnection>, SendError> {
+    let (dest_socket, socket) = channel(MATCHMAKER_MAX_REQ);
     matchmaker.send(Request {
         dest_socket,
         id: id.into(),
         port,
         conn_type: ConnType::Listener,
-    });
-    socket
+    }).await?;
+    Ok(socket)
 }
 
 /// A request to the match maker
