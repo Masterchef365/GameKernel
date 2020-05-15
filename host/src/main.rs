@@ -30,7 +30,7 @@ fn main() -> Result<()> {
     Ok(std::thread::park())
 }
 
-async fn test_task(mut mm: matchmaker::MMSender, spawner: ThreadPool) {
+async fn test_task(mut mm: matchmaker::MatchMakerConnection, spawner: ThreadPool) {
     println!("Test task started");
     let mut conn = matchmaker::create_listener("plugin_a", 5062, &mut mm).await.unwrap();
     while let Some(socket) = conn.next().await {
