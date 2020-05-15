@@ -1,4 +1,4 @@
-use crate::socket_types::Handle;
+use protocols::Handle;
 use once_cell::unsync::Lazy;
 use std::collections::HashMap;
 use std::task::Waker;

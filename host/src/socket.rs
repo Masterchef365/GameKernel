@@ -1,10 +1,10 @@
 use crate::matchmaker::{ConnType, Request, MATCHMAKER_MAX_REQ};
-use crate::socket_types::*;
-use futures::channel::mpsc::{channel, Receiver, Sender};
-use futures::sink::{Sink, SinkExt};
+use crate::twoway::*;
+use futures::channel::mpsc::{channel, Sender};
 use futures::stream::StreamExt;
+use protocols::*;
 use std::cell::Cell;
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::io;
 use std::pin::Pin;
 use std::task::Context;
@@ -47,7 +47,7 @@ impl SocketManager {
         self.connectors.insert(new_handle, rx.peekable());
         self.matchmaker
             .try_send(Request {
-                id: addr.into(),
+                id: addr.to_string(),
                 port,
                 conn_type: ConnType::Connector,
                 dest_socket: tx,

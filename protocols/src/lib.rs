@@ -1,6 +1,10 @@
 use std::io::{self, ErrorKind};
 use std::task::Poll;
 
+pub type ModuleId = String;
+pub type Port = u16;
+pub type Handle = u32;
+
 /// Either represents an error, or a u32
 #[repr(transparent)]
 #[derive(Debug)]

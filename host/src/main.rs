@@ -9,10 +9,8 @@ use wasm_module::WasmModule;
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 
-use std::sync::Arc;
-
 fn main() -> Result<()> {
-    let mut spawner = ThreadPool::new()?;
+    let spawner = ThreadPool::new()?;
 
     let (mm, tx) = matchmaker::MatchMaker::new();
     spawner.spawn(mm.task())?;
@@ -23,14 +21,12 @@ fn main() -> Result<()> {
     let plugin_b = WasmModule::from_path("/home/duncan/Projects/game_kernel/plugin_b/target/wasm32-unknown-unknown/release/plugin_b.wasm")?;
     spawner.spawn(plugin_b.task("plugin_b".into(), tx.clone()))?;
 
-    //for i in 0..5 {
-        spawner.spawn(test_task(tx.clone(), spawner.clone()))?;
-    //}
+    spawner.spawn(test_server(tx.clone(), spawner.clone()))?;
 
     Ok(std::thread::park())
 }
 
-async fn test_task(mut mm: matchmaker::MatchMakerConnection, spawner: ThreadPool) {
+async fn test_server(mut mm: matchmaker::MatchMakerConnection, spawner: ThreadPool) {
     println!("Test task started");
     let mut conn = matchmaker::create_listener("plugin_a", 5062, &mut mm).await.unwrap();
     while let Some(socket) = conn.next().await {
@@ -49,7 +45,7 @@ async fn test_task(mut mm: matchmaker::MatchMakerConnection, spawner: ThreadPool
 
 
 /*
-   async fn test_task(mut mm: matchmaker::MMSender, name: String) {
+   async fn test_client(mut mm: matchmaker::MMSender, name: String) {
    let mut conn = matchmaker::connect("plugin_a", 5062, &mut mm)
    .await
    .expect("No option")

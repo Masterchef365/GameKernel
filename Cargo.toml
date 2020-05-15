@@ -1,10 +1,10 @@
 [workspace]
 members = [
-    "host",
     "libplugin",
-    "render",
-]
-exclude = [
     "plugin_a",
     "plugin_b",
+    "protocols",
+]
+exclude = [
+    "host",
 ]

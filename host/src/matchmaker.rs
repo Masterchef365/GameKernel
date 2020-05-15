@@ -1,4 +1,5 @@
-use crate::socket_types::*;
+use protocols::*;
+use crate::twoway::*;
 use futures::channel::mpsc::{channel, Receiver, SendError, Sender};
 use futures::sink::SinkExt;
 use futures::stream::{Stream, StreamExt};

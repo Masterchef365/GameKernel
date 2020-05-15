@@ -5,10 +5,6 @@ use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-pub type ModuleId = String;
-pub type Port = u16;
-pub type Handle = u32;
-
 const CHANNEL_CAP: usize = 128;
 
 pub type PeekRecv<T> = Peekable<Receiver<T>>;
@@ -16,7 +12,6 @@ pub type PeekRecv<T> = Peekable<Receiver<T>>;
 pub struct TwoWayConnection {
     tx: Sender<u8>,
     rx: PeekRecv<u8>,
-    is_a: bool,
 }
 
 impl TwoWayConnection {
@@ -27,12 +22,10 @@ impl TwoWayConnection {
             TwoWayConnection {
                 tx: a_tx,
                 rx: a_rx.peekable(),
-                is_a: true,
             },
             TwoWayConnection {
                 tx: b_tx,
                 rx: b_rx.peekable(),
-                is_a: false,
             },
         )
     }
@@ -65,11 +58,11 @@ impl AsyncWrite for TwoWayConnection {
         }
     }
 
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<()>> {
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context) -> Poll<Result<()>> {
         Poll::Ready(Ok(())) //TODO
     }
 
-    fn poll_close(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<()>> {
+    fn poll_close(self: Pin<&mut Self>, _cx: &mut Context) -> Poll<Result<()>> {
         Poll::Ready(Ok(())) //TODO
     }
 }
