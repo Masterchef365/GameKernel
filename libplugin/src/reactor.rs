@@ -1,7 +1,7 @@
+use crate::socket_types::Handle;
 use once_cell::unsync::Lazy;
 use std::collections::HashMap;
 use std::task::Waker;
-use crate::socket_types::Handle;
 
 pub static mut REACTOR: Lazy<Reactor> = Lazy::new(Reactor::new);
 
@@ -32,7 +32,6 @@ impl Reactor {
         }
     }
 }
-
 
 pub fn register(handle: Handle, waker: Waker) {
     unsafe {

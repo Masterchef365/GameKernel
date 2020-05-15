@@ -1,10 +1,10 @@
 mod wasm_module;
 use anyhow::Result;
-use wasm_module::WasmModule;
 use futures::executor::ThreadPool;
 use futures::task::SpawnExt;
+use futures::{SinkExt, StreamExt};
 use game_kernel::matchmaker;
-use futures::{StreamExt, SinkExt};
+use wasm_module::WasmModule;
 fn main() -> Result<()> {
     let mut spawner = ThreadPool::new()?;
 
@@ -26,13 +26,19 @@ fn main() -> Result<()> {
 }
 
 async fn test_task(mut mm: matchmaker::MMSender, name: String) {
-    let mut conn = matchmaker::connect("plugin_a", 5062, &mut mm).await.expect("No option").expect("No socket");
+    let mut conn = matchmaker::connect("plugin_a", 5062, &mut mm)
+        .await
+        .expect("No option")
+        .expect("No socket");
     use tokio_util::codec::{Framed, LengthDelimitedCodec};
     use tokio_util::compat::FuturesAsyncReadCompatExt;
     let mut socket = Framed::new(conn.compat(), LengthDelimitedCodec::new());
     let mut n = 0u32;
     loop {
-        socket.send(format!("{}: {}", name, n).into()).await.unwrap();
+        socket
+            .send(format!("{}: {}", name, n).into())
+            .await
+            .unwrap();
         println!("{}: {:?}", name, socket.next().await.unwrap().unwrap());
         n += 1;
     }

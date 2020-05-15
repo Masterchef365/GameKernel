@@ -45,4 +45,3 @@ impl From<Poll<io::Result<u32>>> for Maybe {
         })
     }
 }
-

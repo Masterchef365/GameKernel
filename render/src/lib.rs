@@ -1,5 +1,5 @@
 use kiss3d::window::Window;
-use libplugin::{spawn, AsyncReadExt, Socket, SocketListener, StreamExt, yield_now};
+use libplugin::{spawn, yield_now, AsyncReadExt, Socket, SocketListener, StreamExt};
 use nalgebra::Point3;
 use std::cell::RefCell;
 use std::rc::Rc;

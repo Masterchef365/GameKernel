@@ -1,9 +1,10 @@
-mod socket_types;
 mod debug;
 mod maybe;
 mod reactor;
+mod socket_types;
 mod task_pool;
 pub use debug::debug;
+#[cfg(target_arch = "wasm32")]
 pub use socket::{Socket, SocketListener};
 pub use task_pool::{spawn, yield_now};
 
