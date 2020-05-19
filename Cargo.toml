@@ -8,4 +8,5 @@ members = [
 exclude = [
     "host",
     "loopback",
+    "render",
 ]

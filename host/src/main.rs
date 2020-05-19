@@ -31,7 +31,7 @@ fn main() -> Result<()> {
 
 async fn test_server(mut mm: matchmaker::MatchMakerConnection, spawner: ThreadPool) {
     println!("Test task started");
-    let mut conn = matchmaker::create_listener("plugin_a", 5062, &mut mm)
+    let mut conn = matchmaker::create_listener("renderer", 0, &mut mm)
         .await
         .unwrap();
     while let Some(socket) = conn.next().await {
