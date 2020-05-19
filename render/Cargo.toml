@@ -4,12 +4,9 @@ version = "0.1.0"
 authors = ["Masterchef365 <duncan.freeman1@gmail.com>"]
 edition = "2018"
 
-[lib]
-crate-type = ["cdylib"]
-
 [dependencies]
-libplugin = { path = "../libplugin" }
 kiss3d = "0.23"
 nalgebra = { version = "0.20", features = ["serde-serialize"] }
 bincode = "1.2"
 futures = "0.3"
+loopback = { path = "../loopback" }

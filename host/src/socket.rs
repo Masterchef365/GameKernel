@@ -1,5 +1,5 @@
 use crate::matchmaker::{ConnType, Request, MATCHMAKER_MAX_REQ};
-use crate::twoway::*;
+use loopback::{Loopback, PeekRecv};
 use futures::channel::mpsc::{channel, Sender};
 use futures::stream::StreamExt;
 use protocols::*;
@@ -11,9 +11,9 @@ use std::task::Context;
 use std::task::Poll;
 
 pub struct SocketManager {
-    listeners: HashMap<Handle, PeekRecv<TwoWayConnection>>,
-    connectors: HashMap<Handle, PeekRecv<TwoWayConnection>>,
-    sockets: HashMap<Handle, TwoWayConnection>,
+    listeners: HashMap<Handle, PeekRecv<Loopback>>,
+    connectors: HashMap<Handle, PeekRecv<Loopback>>,
+    sockets: HashMap<Handle, Loopback>,
     matchmaker: Sender<Request>,
     next_handle: Handle,
     id: ModuleId,

@@ -1,3 +1,5 @@
+// TODO: Perf increase by buffering sends!
+
 use futures::channel::mpsc::{channel, Receiver, Sender};
 use futures::io::{AsyncRead, AsyncWrite, Error, Result};
 use futures::stream::{Peekable, StreamExt};
@@ -9,21 +11,21 @@ const CHANNEL_CAP: usize = 128;
 
 pub type PeekRecv<T> = Peekable<Receiver<T>>;
 
-pub struct TwoWayConnection {
+pub struct Loopback {
     tx: Sender<u8>,
     rx: PeekRecv<u8>,
 }
 
-impl TwoWayConnection {
+impl Loopback {
     pub fn pair() -> (Self, Self) {
         let (a_tx, b_rx) = channel(CHANNEL_CAP);
         let (b_tx, a_rx) = channel(CHANNEL_CAP);
         (
-            TwoWayConnection {
+            Loopback {
                 tx: a_tx,
                 rx: a_rx.peekable(),
             },
-            TwoWayConnection {
+            Loopback {
                 tx: b_tx,
                 rx: b_rx.peekable(),
             },
@@ -35,7 +37,7 @@ impl TwoWayConnection {
     }
 }
 
-impl AsyncWrite for TwoWayConnection {
+impl AsyncWrite for Loopback {
     fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context, buf: &[u8]) -> Poll<Result<usize>> {
         let ncerror = |_| io::Error::from(io::ErrorKind::NotConnected);
 
@@ -67,7 +69,7 @@ impl AsyncWrite for TwoWayConnection {
     }
 }
 
-impl AsyncRead for TwoWayConnection {
+impl AsyncRead for Loopback {
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context,

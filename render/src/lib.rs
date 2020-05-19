@@ -10,35 +10,37 @@ pub extern "C" fn main() {
     spawn(server())
 }
 
-type PointCollection = Rc<RefCell<Vec<Point3<f32>>>>;
+pub type ObjectData;
 
-async fn server() {
-    let mut listener = SocketListener::new(0).unwrap();
-    let points = PointCollection::default();
-    points.borrow_mut().push(Point3::new(0.0, 0.0, 0.0));
-    spawn(render_loop(points.clone()));
-    while let Some(Ok(connection)) = listener.next().await {
-        spawn(handle_connection(connection, points.clone()));
-    }
+pub type Id = u64;
+
+pub enum Request {
+    CreateObject,
+    SetObjectData(Id, ObjectData),
+    DeleteObject(Id),
 }
 
-async fn render_loop(points: PointCollection) {
-    let mut window = Window::new("Game kernel :: OwO");
-    while window.render() {
-        for point in points.borrow().iter() {
-            window.draw_point(point, &Point3::new(1.0, 1.0, 1.0));
+pub enum Response {
+    ObjectCreated(Id),
+}
+
+pub struct Renderer {
+    window: Window,
+    next_id: Id,
+    objects: HashMap<Id, ObjectData>,
+}
+
+impl Renderer {
+    pub fn new(window_name: &str) -> Self {
+        Self {
+            next_id: 0,
+            objects: Default::default(),
         }
-        yield_now().await;
     }
-}
 
-async fn handle_connection(mut s: Socket, points: PointCollection) {
-    let mut buf = [0u8; 20];
-    println!("Renderer Handling connection");
-    loop {
-        s.read_exact(&mut buf).await.unwrap();
-        println!("BUFFER");
-        let msg: Point3<f32> = bincode::deserialize(&buf).unwrap();
-        points.borrow_mut().push(msg);
+    pub fn loop()
+
+    pub fn spawn() {
+        let renderer = Renderer::new()
     }
 }

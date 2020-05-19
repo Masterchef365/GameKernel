@@ -1,19 +1,19 @@
 use protocols::*;
-use crate::twoway::*;
+use loopback::Loopback;
 use futures::channel::mpsc::{channel, Receiver, SendError, Sender};
 use futures::sink::SinkExt;
 use futures::stream::{Stream, StreamExt};
 use std::collections::HashMap;
 
 pub type MatchMakerConnection = Sender<Request>;
-pub type ConnSender = Sender<TwoWayConnection>;
+pub type ConnSender = Sender<Loopback>;
 
 /// Connect to a module via MatchMaker
 pub async fn connect(
     id: impl Into<ModuleId>,
     port: Port,
     matchmaker: &mut MatchMakerConnection,
-) -> Result<Option<TwoWayConnection>, SendError> {
+) -> Result<Option<Loopback>, SendError> {
     let (dest_socket, mut socket) = channel(MATCHMAKER_MAX_REQ);
     matchmaker
         .send(Request {
@@ -31,7 +31,7 @@ pub async fn create_listener(
     id: impl Into<ModuleId>,
     port: Port,
     matchmaker: &mut MatchMakerConnection,
-) -> Result<impl Stream<Item = TwoWayConnection>, SendError> {
+) -> Result<impl Stream<Item = Loopback>, SendError> {
     let (dest_socket, socket) = channel(MATCHMAKER_MAX_REQ);
     matchmaker
         .send(Request {
@@ -101,7 +101,7 @@ impl MatchMaker {
         // Atempt to connect the socket immediately
         let addr = (id, port);
         if let Some(listener) = self.listeners.get_mut(&addr) {
-            let (a, b) = TwoWayConnection::pair();
+            let (a, b) = Loopback::pair();
             if listener.send(a).await.is_ok() {
                 // Note that we don't care about the return value, because if it failed to send
                 // then the other side will notice when it is unable to send or receive
@@ -129,7 +129,7 @@ impl MatchMaker {
         let addr = (id, port);
         if let Some(connector_list) = self.active_connections.get_mut(&addr) {
             while let Some(mut connector) = connector_list.pop() {
-                let (a, b) = TwoWayConnection::pair();
+                let (a, b) = Loopback::pair();
 
                 if listener.send(b).await.is_err() {
                     connector_list.push(connector);
