@@ -23,53 +23,47 @@ fn main() -> Result<()> {
     spawner.spawn(plugin_b.task("plugin_b".into(), tx.clone()))?;
     */
 
-    spawner.spawn(test_server(tx.clone(), spawner.clone()))?;
-    spawner.spawn(test_client(tx.clone(), "Dave".into()))?;
+    spawner.spawn(vg_server(tx.clone(), spawner.clone()))?;
+    for _ in 0..1000 {
+        spawner.spawn(test_client(tx.clone()))?;
+    }
 
     Ok(std::thread::park())
 }
 
-async fn test_server(mut mm: matchmaker::MatchMakerConnection, spawner: ThreadPool) {
-    println!("Test task started");
+async fn vg_server(mut mm: matchmaker::MatchMakerConnection, spawner: ThreadPool) {
+    let renderer = render::Renderer::new("Game Kernel Vector Graphics".into());
     let mut conn = matchmaker::create_listener("renderer", 0, &mut mm)
         .await
         .unwrap();
     while let Some(socket) = conn.next().await {
-        println!("Got new connection");
+        let renderer = renderer.clone();
         spawner
-            .spawn(async move {
-                let mut i = 0u32;
-                let mut framed = Framed::new(socket.compat(), LengthDelimitedCodec::new());
-                println!("Server handling new connection");
-                loop {
-                    let bytes = framed.next().await.unwrap().unwrap();
-                    println!("{}:", &String::from_utf8(bytes.to_vec()).unwrap());
-                    framed
-                        .send(format!("Message from server {}", i).into())
-                        .await
-                        .unwrap();
-                    i += 1;
-                }
-            })
+            .spawn(render::Renderer::handle_client(renderer.clone(), socket))
             .unwrap();
     }
 }
 
-async fn test_client(mut mm: matchmaker::MatchMakerConnection, name: String) {
-    let mut conn = matchmaker::connect("plugin_a", 5062, &mut mm)
+async fn test_client(mut mm: matchmaker::MatchMakerConnection) {
+    let conn = matchmaker::connect("renderer", 0, &mut mm)
         .await
         .expect("No option")
         .expect("No socket");
-    use tokio_util::codec::{Framed, LengthDelimitedCodec};
-    use tokio_util::compat::FuturesAsyncReadCompatExt;
-    let mut socket = Framed::new(conn.compat(), LengthDelimitedCodec::new());
-    let mut n = 0u32;
+    let mut conn = render::RendererConnection::new(conn);
+    let id = conn
+        .add_object(render::ObjectData {
+            data: Box::new([(
+                render::Point3::origin(),
+                render::Point3::new(1.0, 1.0, 1.0),
+                render::Point3::new(1.0, 1.0, 1.0),
+            )]),
+            transform: render::Translation3::identity(),
+        })
+        .await;
+    let mut i: f32 = 0.0;
     loop {
-        socket
-            .send(format!("{}: {}", name, n).into())
-            .await
-            .unwrap();
-        println!("{}: {:?}", name, socket.next().await.unwrap().unwrap());
-        n += 1;
+        conn.set_transform(id, render::Translation3::new(i.cos(), 0.0, 0.0))
+            .await;
+        i += 0.00001;
     }
 }

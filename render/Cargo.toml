@@ -18,5 +18,6 @@ bincode = "1.2"
 futures = "0.3"
 tokio-util = { version = "0.3", features = ["codec", "compat"] }
 serde = { version = "1", features = ["derive"] }
+
 kiss3d = { version = "0.23", optional = true }
 loopback = { path = "../loopback", optional = true }

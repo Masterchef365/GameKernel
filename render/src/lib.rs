@@ -5,7 +5,7 @@ mod host;
 pub use host::*;
 
 use futures::{AsyncRead, AsyncWrite, SinkExt, StreamExt};
-use nalgebra::{Point3, Translation3};
+pub use nalgebra::{Point3, Translation3};
 use serde::{Deserialize, Serialize};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
 use tokio_util::compat::Compat;
