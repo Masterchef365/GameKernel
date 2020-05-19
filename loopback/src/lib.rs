@@ -34,6 +34,7 @@ impl Loopback {
 
     pub fn has_data(&mut self, cx: &mut Context) -> bool {
         Pin::new(&mut self.rx).poll_peek(cx).is_ready()
+            || Pin::new(&mut self.tx).poll_ready(cx).is_ready()
     }
 }
 

@@ -10,6 +10,4 @@ crate-type = ["cdylib"]
 [dependencies]
 futures = "0.3"
 libplugin = { path = "../libplugin" }
-tokio-util = { version = "0.3", features = ["codec", "compat"] }
-nalgebra = { version = "0.20", features = ["serde-serialize"] }
-bincode = "1.2"
+render = { path = "../render" }

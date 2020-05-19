@@ -18,15 +18,17 @@ fn main() -> Result<()> {
     /*
     let plugin_a = WasmModule::from_path("../target/wasm32-unknown-unknown/release/plugin_a.wasm")?;
     spawner.spawn(plugin_a.task("plugin_a".into(), tx.clone()))?;
+    */
 
     let plugin_b = WasmModule::from_path("../target/wasm32-unknown-unknown/release/plugin_b.wasm")?;
     spawner.spawn(plugin_b.task("plugin_b".into(), tx.clone()))?;
-    */
 
     spawner.spawn(vg_server(tx.clone(), spawner.clone()))?;
+    /*
     for _ in 0..1000 {
-        spawner.spawn(test_client(tx.clone()))?;
+    spawner.spawn(test_client(tx.clone()))?;
     }
+    */
 
     Ok(std::thread::park())
 }
@@ -55,7 +57,7 @@ async fn test_client(mut mm: matchmaker::MatchMakerConnection) {
             data: Box::new([(
                 render::Point3::origin(),
                 render::Point3::new(1.0, 1.0, 1.0),
-                render::Point3::new(1.0, 1.0, 1.0),
+                render::Point3::new(1.0, 0.5, 1.0),
             )]),
             transform: render::Translation3::identity(),
         })
