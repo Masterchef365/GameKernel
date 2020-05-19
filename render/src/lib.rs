@@ -1,7 +1,7 @@
 use futures::lock::Mutex;
 use futures::{AsyncRead, AsyncWrite, SinkExt, StreamExt};
 use kiss3d::window::Window;
-use nalgebra::{Point3, Transform3};
+use nalgebra::{Point3, Translation3};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -12,7 +12,7 @@ use tokio_util::compat::FuturesAsyncReadCompatExt;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ObjectData {
     pub data: Box<[(Point3<f32>, Point3<f32>, Point3<f32>)]>,
-    pub transform: Transform3<f32>,
+    pub transform: Translation3<f32>,
 }
 
 pub type Id = u64;
@@ -20,7 +20,7 @@ pub type Id = u64;
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Request {
     CreateObject(ObjectData),
-    SetObjectTransform(Id, Transform3<f32>),
+    SetObjectTranslation(Id, Translation3<f32>),
     DeleteObject(Id),
 }
 
@@ -77,7 +77,7 @@ impl Renderer {
                         .await
                         .unwrap();
                 }
-                Request::SetObjectTransform(id, transform) => {
+                Request::SetObjectTranslation(id, transform) => {
                     if let Some(object) = share.objects.get_mut(&id) {
                         object.transform = transform;
                     }
@@ -89,7 +89,13 @@ impl Renderer {
     pub fn render_loop(share: Arc<Mutex<Self>>, window_name: String) {
         let mut window = Window::new(&window_name);
         while window.render() {
-            for object in share.try_lock().unwrap().objects.values() {
+            let share = loop {
+                if let Some(lock) = share.try_lock() {
+                    break lock;
+                }
+                std::thread::yield_now();
+            };
+            for object in share.objects.values() {
                 for (a, b, color) in object.data.iter() {
                     let a = object.transform.transform_point(a);
                     let b = object.transform.transform_point(b);
@@ -121,10 +127,10 @@ impl<S: AsyncRead + AsyncWrite + Unpin> RendererConnection<S> {
         id
     }
 
-    pub async fn set_transform(&mut self, id: Id, transform: Transform3<f32>) {
+    pub async fn set_transform(&mut self, id: Id, transform: Translation3<f32>) {
         self.socket
             .send(
-                bincode::serialize(&Request::SetObjectTransform(id, transform))
+                bincode::serialize(&Request::SetObjectTranslation(id, transform))
                     .unwrap()
                     .into(),
             )
