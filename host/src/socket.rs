@@ -1,7 +1,7 @@
 use crate::matchmaker::{ConnType, Request, MATCHMAKER_MAX_REQ};
-use loopback::{Loopback, PeekRecv};
 use futures::channel::mpsc::{channel, Sender};
 use futures::stream::StreamExt;
+use loopback::{Loopback, PeekRecv};
 use protocols::*;
 use std::cell::Cell;
 use std::collections::HashMap;

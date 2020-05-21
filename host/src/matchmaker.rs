@@ -1,8 +1,8 @@
-use protocols::*;
-use loopback::Loopback;
 use futures::channel::mpsc::{channel, Receiver, SendError, Sender};
 use futures::sink::SinkExt;
 use futures::stream::{Stream, StreamExt};
+use loopback::Loopback;
+use protocols::*;
 use std::collections::HashMap;
 
 pub type MatchMakerConnection = Sender<Request>;
@@ -125,7 +125,7 @@ impl MatchMaker {
 
     async fn new_listener(&mut self, id: ModuleId, port: Port, mut listener: ConnSender) {
         // If there's a connector list for the address of the connecting listener, try to create a
-        // connector for each entry. 
+        // connector for each entry.
         let addr = (id, port);
         if let Some(connector_list) = self.active_connections.get_mut(&addr) {
             while let Some(mut connector) = connector_list.pop() {

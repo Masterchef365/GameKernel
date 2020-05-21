@@ -2,6 +2,7 @@
 
 use futures::channel::mpsc::{channel, Receiver, Sender};
 use futures::io::{AsyncRead, AsyncWrite, Error, Result};
+use futures::sink::Sink;
 use futures::stream::{Peekable, StreamExt};
 use std::io;
 use std::pin::Pin;
@@ -38,10 +39,12 @@ impl Loopback {
     }
 }
 
+fn ncerror<T>(_: T) -> io::Error {
+    io::Error::from(io::ErrorKind::NotConnected)
+}
+
 impl AsyncWrite for Loopback {
     fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context, buf: &[u8]) -> Poll<Result<usize>> {
-        let ncerror = |_| io::Error::from(io::ErrorKind::NotConnected);
-
         let mut n = 0;
         for byte in buf.iter() {
             let ready = Pin::new(&mut self.tx)
@@ -61,8 +64,8 @@ impl AsyncWrite for Loopback {
         }
     }
 
-    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context) -> Poll<Result<()>> {
-        Poll::Ready(Ok(())) //TODO
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<()>> {
+        Pin::new(&mut self.tx).poll_flush(cx).map_err(ncerror)
     }
 
     fn poll_close(self: Pin<&mut Self>, _cx: &mut Context) -> Poll<Result<()>> {
