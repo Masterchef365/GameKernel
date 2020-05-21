@@ -1,6 +1,7 @@
 use crate::*;
 use futures::lock::Mutex;
 use futures::{AsyncRead, AsyncWrite, SinkExt, StreamExt};
+use kiss3d::event::{Action, Key};
 use kiss3d::window::Window;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -42,9 +43,14 @@ impl Renderer {
             let mut share = share.lock().await;
             match request {
                 Request::WaitFrame => {
+                    // Set a wakeup routine on the renderer
                     let (tx, rx) = futures::channel::oneshot::channel();
                     share.waiting_for_frame.push(tx);
+
+                    // Release the lock so the renderer can actually render the frame
                     drop(share);
+
+                    // Wake back up when there's data and pass it back to the client
                     framed
                         .send(bincode::serialize(&rx.await.unwrap()).unwrap().into())
                         .await
@@ -80,6 +86,7 @@ impl Renderer {
                 }
                 std::thread::yield_now();
             };
+
             for object in share.objects.values() {
                 for (a, b, color) in object.data.iter() {
                     let a = object.transform.transform_point(a);
@@ -87,10 +94,19 @@ impl Renderer {
                     window.draw_line(&a, &b, &color);
                 }
             }
+
+            // Wake up registered events
             for waiter in share.waiting_for_frame.drain(..) {
-                waiter.send(FrameInfo {
-                    keys: Vec::new(),
-                }).unwrap();
+                let mut keys = Vec::new();
+                for (key, response) in
+                    [(Key::W, 'W'), (Key::A, 'A'), (Key::S, 'S'), (Key::D, 'D')].iter()
+                {
+                    match window.get_key(*key) {
+                        Action::Press => keys.push(*response),
+                        _ => (),
+                    }
+                }
+                waiter.send(FrameInfo { keys }).unwrap();
             }
         }
     }

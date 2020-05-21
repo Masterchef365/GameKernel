@@ -33,7 +33,7 @@ pub struct RendererConn<S> {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FrameInfo {
-    keys: Vec<char>,
+    pub keys: Vec<char>,
 }
 
 impl<S: AsyncRead + AsyncWrite + Unpin> RendererConn<S> {
