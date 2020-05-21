@@ -13,21 +13,36 @@ async fn connect() {
     let socket = Socket::connect("renderer", 0).unwrap().await.unwrap();
     debug("Client connected!");
 
-    let mut conn = render::RendererConnection::new(socket);
+    let mut conn = render::RendererConn::new(socket);
+
     let id = conn
         .add_object(render::ObjectData {
             data: Box::new([(
                 render::Point3::origin(),
                 render::Point3::new(1.0, 1.0, 1.0),
-                render::Point3::new(1.0, 1.0, 1.0),
+                render::Point3::new(1.0, 1.0, 0.0),
             )]),
             transform: render::Translation3::identity(),
         })
         .await;
+
     let mut i: f32 = 0.0;
+    let mut x = 0.0;
+    let mut y = 0.0;
+    let rate = 0.05;
     loop {
-        conn.set_transform(id, render::Translation3::new(i.cos(), 0.0, 0.0))
+        let info = conn.wait_frame().await;
+        for key in info.keys {
+            match key {
+                'W' => y += rate,
+                'S' => y -= rate,
+                'A' => x -= rate,
+                'D' => x += rate,
+                _ => (),
+            }
+        }
+        conn.set_transform(id, render::Translation3::new(x, y, 0.0))
             .await;
-        i += 0.00001;
+        i += 0.1;
     }
 }
