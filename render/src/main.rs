@@ -14,7 +14,7 @@ fn main() {
         .unwrap();
     spawner
         .spawn(async move {
-            let mut conn = RendererConnection::new(a);
+            let mut conn = RendererObjects::new(a);
             let id = conn.add_object(ObjectData {
                 data: Box::new([(
                     Point3::origin(),

@@ -24,24 +24,26 @@ pub enum Request {
     CreateObject(ObjectData),
     SetObjectTranslation(Id, Translation3<f32>),
     DeleteObject(Id),
+    WaitFrame,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub enum Response {
-    ObjectCreated(Id),
-}
-
-pub struct RendererConnection<S> {
+pub struct RendererConn<S> {
     socket: Framed<Compat<S>, LengthDelimitedCodec>,
 }
 
-impl<S: AsyncRead + AsyncWrite + Unpin> RendererConnection<S> {
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FrameInfo {
+    keys: Vec<char>,
+}
+
+impl<S: AsyncRead + AsyncWrite + Unpin> RendererConn<S> {
     pub fn new(socket: S) -> Self {
         Self {
             socket: Framed::new(socket.compat(), LengthDelimitedCodec::new()),
         }
     }
 
+    // TODO: Make this fallible
     pub async fn add_object(&mut self, object: ObjectData) -> Id {
         self.socket
             .send(
@@ -51,9 +53,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> RendererConnection<S> {
             )
             .await
             .unwrap();
-        let Response::ObjectCreated(id) =
-            bincode::deserialize(&self.socket.next().await.unwrap().unwrap()).unwrap();
-        id
+        bincode::deserialize(&self.socket.next().await.unwrap().unwrap()).unwrap()
     }
 
     pub async fn set_transform(&mut self, id: Id, transform: Translation3<f32>) {
@@ -65,5 +65,14 @@ impl<S: AsyncRead + AsyncWrite + Unpin> RendererConnection<S> {
             )
             .await
             .unwrap();
+    }
+
+    pub async fn wait_frame(&mut self) -> FrameInfo {
+        self.socket
+            .send(bincode::serialize(&Request::WaitFrame).unwrap().into())
+            .await
+            .unwrap();
+        let msg = self.socket.next().await.unwrap().unwrap();
+        bincode::deserialize(&msg).unwrap()
     }
 }

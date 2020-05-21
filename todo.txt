@@ -2,5 +2,6 @@ Modules cannot be killed
 Modules can use as much memory and processing time as they'd like
 Single bytes are sent over channels (probably a huge performance hit)
 Some bug with message lengths?
+    In the new implementation, remember to make it so that when poll_flush is called the currnt buffer is actually fed into the channel regardless of length, otherwise you could get weird latency artefacts! 
 
 Try reporting the count in plugin_a every 1000 or so and don't print ****

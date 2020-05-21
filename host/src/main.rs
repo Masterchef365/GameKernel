@@ -1,3 +1,4 @@
+#![allow(unused_imports)]
 mod wasm_module;
 use anyhow::Result;
 use futures::executor::ThreadPool;
@@ -20,15 +21,15 @@ fn main() -> Result<()> {
     spawner.spawn(plugin_a.task("plugin_a".into(), tx.clone()))?;
     */
 
+    /*
     let plugin_b = WasmModule::from_path("../target/wasm32-unknown-unknown/release/plugin_b.wasm")?;
     spawner.spawn(plugin_b.task("plugin_b".into(), tx.clone()))?;
+    */
 
     spawner.spawn(vg_server(tx.clone(), spawner.clone()))?;
-    /*
-    for _ in 0..1000 {
+    //for _ in 0..1000 {
     spawner.spawn(test_client(tx.clone()))?;
-    }
-    */
+    //}
 
     Ok(std::thread::park())
 }
@@ -51,7 +52,8 @@ async fn test_client(mut mm: matchmaker::MatchMakerConnection) {
         .await
         .expect("No option")
         .expect("No socket");
-    let mut conn = render::RendererConnection::new(conn);
+    let mut conn = render::RendererConn::new(conn);
+
     let id = conn
         .add_object(render::ObjectData {
             data: Box::new([(
@@ -62,10 +64,12 @@ async fn test_client(mut mm: matchmaker::MatchMakerConnection) {
             transform: render::Translation3::identity(),
         })
         .await;
+
     let mut i: f32 = 0.0;
     loop {
+        let info = conn.wait_frame().await;
         conn.set_transform(id, render::Translation3::new(i.cos(), 0.0, 0.0))
             .await;
-        i += 0.00001;
+        i += 0.1;
     }
 }

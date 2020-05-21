@@ -10,6 +10,7 @@ use tokio_util::compat::FuturesAsyncReadCompatExt;
 pub struct Renderer {
     next_id: Id,
     objects: HashMap<Id, ObjectData>,
+    waiting_for_frame: Vec<futures::channel::oneshot::Sender<FrameInfo>>,
 }
 
 impl Renderer {
@@ -17,6 +18,7 @@ impl Renderer {
         let instance = Arc::new(Mutex::new(Self {
             next_id: 0,
             objects: HashMap::new(),
+            waiting_for_frame: Vec::new(),
         }));
         let ret = instance.clone();
         std::thread::spawn(move || Self::render_loop(instance, window_name));
@@ -39,6 +41,15 @@ impl Renderer {
             let request: Request = bincode::deserialize(&msg).unwrap();
             let mut share = share.lock().await;
             match request {
+                Request::WaitFrame => {
+                    let (tx, rx) = futures::channel::oneshot::channel();
+                    share.waiting_for_frame.push(tx);
+                    drop(share);
+                    framed
+                        .send(bincode::serialize(&rx.await.unwrap()).unwrap().into())
+                        .await
+                        .unwrap();
+                }
                 Request::DeleteObject(id) => {
                     share.objects.remove(&id);
                 }
@@ -47,11 +58,7 @@ impl Renderer {
                     share.objects.insert(id, object);
                     drop(share); // Release the lock early
                     framed
-                        .send(
-                            bincode::serialize(&Response::ObjectCreated(id))
-                                .unwrap()
-                                .into(),
-                        )
+                        .send(bincode::serialize(&id).unwrap().into())
                         .await
                         .unwrap();
                 }
@@ -67,7 +74,7 @@ impl Renderer {
     pub fn render_loop(share: Arc<Mutex<Self>>, window_name: String) {
         let mut window = Window::new(&window_name);
         while window.render() {
-            let share = loop {
+            let mut share = loop {
                 if let Some(lock) = share.try_lock() {
                     break lock;
                 }
@@ -79,6 +86,11 @@ impl Renderer {
                     let b = object.transform.transform_point(b);
                     window.draw_line(&a, &b, &color);
                 }
+            }
+            for waiter in share.waiting_for_frame.drain(..) {
+                waiter.send(FrameInfo {
+                    keys: Vec::new(),
+                }).unwrap();
             }
         }
     }
