@@ -1,5 +1,3 @@
-// TODO: Perf increase by buffering sends!
-
 use futures::channel::mpsc::{channel, Receiver, Sender};
 use futures::io::{AsyncRead, AsyncWrite, Error, Result};
 use futures::sink::Sink;
@@ -10,11 +8,9 @@ use std::task::{Context, Poll};
 
 const CHANNEL_CAP: usize = 128;
 
-pub type PeekRecv<T> = Peekable<Receiver<T>>;
-
 pub struct Loopback {
     tx: Sender<u8>,
-    rx: PeekRecv<u8>,
+    rx: Peekable<Receiver<u8>>,
 }
 
 impl Loopback {
@@ -33,6 +29,7 @@ impl Loopback {
         )
     }
 
+    /// If this loopback has data ready for a read, send it.
     pub fn has_data(&mut self, cx: &mut Context) -> bool {
         Pin::new(&mut self.rx).poll_peek(cx).is_ready()
             || Pin::new(&mut self.tx).poll_ready(cx).is_ready()

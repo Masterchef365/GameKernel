@@ -1,7 +1,7 @@
 use crate::matchmaker::{ConnType, Request, MATCHMAKER_MAX_REQ};
-use futures::channel::mpsc::{channel, Sender};
-use futures::stream::StreamExt;
-use loopback::{Loopback, PeekRecv};
+use futures::channel::mpsc::{channel, Receiver, Sender};
+use futures::stream::{Peekable, StreamExt};
+use loopback::Loopback;
 use protocols::*;
 use std::cell::Cell;
 use std::collections::HashMap;
@@ -9,6 +9,8 @@ use std::io;
 use std::pin::Pin;
 use std::task::Context;
 use std::task::Poll;
+
+type PeekRecv<T> = Peekable<Receiver<T>>;
 
 pub struct SocketManager {
     listeners: HashMap<Handle, PeekRecv<Loopback>>,
