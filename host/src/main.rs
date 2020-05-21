@@ -71,19 +71,15 @@ async fn test_client(mut mm: matchmaker::MatchMakerConnection) {
     let rate = 0.05;
     loop {
         let info = conn.wait_frame().await;
-        let mut dx = 0.0;
-        let mut dy = 0.0;
         for key in info.keys {
             match key {
-                'W' => dy += rate,
-                'S' => dy += -rate,
-                'A' => dx += -rate,
-                'D' => dx += rate,
+                'W' => y += rate,
+                'S' => y -= rate,
+                'A' => x -= rate,
+                'D' => x += rate,
                 _ => (),
             }
         }
-        x += dx;
-        y += dy;
         conn.set_transform(id, render::Translation3::new(x, y, 0.0))
             .await;
         i += 0.1;

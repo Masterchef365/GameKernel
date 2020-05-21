@@ -83,7 +83,6 @@ impl AsyncRead for Loopback {
                     buf[idx] = byte;
                     idx += 1;
                     if idx >= buf.len() {
-                        cx.waker().wake_by_ref();
                         break Poll::Ready(Ok(idx));
                     }
                 }
