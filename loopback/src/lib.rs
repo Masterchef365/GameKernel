@@ -6,7 +6,7 @@ use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-const CHANNEL_CAP: usize = 32;
+const CHANNEL_CAP: usize = 1;
 
 pub struct Loopback {
     tx: Sender<Vec<u8>>,
@@ -51,16 +51,16 @@ impl AsyncWrite for Loopback {
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<()>> {
+        if self.tx_buf.is_empty() {
+            return Poll::Ready(Ok(()));
+        }
+
         if Pin::new(&mut self.tx)
             .poll_ready(cx)
             .map(|v| v.map_err(ncerror))?
             .is_pending()
         {
-            return if self.tx_buf.is_empty() {
-                Poll::Ready(Ok(()))
-            } else {
-                Poll::Pending
-            };
+            return Poll::Pending
         }
 
         let buf = std::mem::take(&mut self.tx_buf);
@@ -94,13 +94,10 @@ impl AsyncRead for Loopback {
             }
         }
 
-        let mut idx = 0;
-        let draining_len = buf.len().min(self.rx_buf.len());
-        for byte in self.rx_buf.drain(..draining_len) {
-            buf[idx] = byte;
-            idx += 1;
-        }
+        let n = buf.len().min(self.rx_buf.len());
+        buf[..n].copy_from_slice(&self.rx_buf[..n]);
+        self.rx_buf.drain(..n);
 
-        Poll::Ready(Ok(idx))
+        Poll::Ready(Ok(n))
     }
 }

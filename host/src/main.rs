@@ -24,12 +24,13 @@ fn main() -> Result<()> {
     let plugin_b = WasmModule::from_path("../target/wasm32-unknown-unknown/release/plugin_b.wasm")?;
     spawner.spawn(plugin_b.task("plugin_b".into(), tx.clone()))?;
 
-    spawner.spawn(vg_server(tx.clone(), spawner.clone()))?;
     /*
-    for _ in 0..10 {
+    for _ in 0..2_000 {
         spawner.spawn(test_client(tx.clone()))?;
     }
     */
+
+    spawner.spawn(vg_server(tx.clone(), spawner.clone()))?;
 
     Ok(std::thread::park())
 }
@@ -65,7 +66,6 @@ async fn test_client(mut mm: matchmaker::MatchMakerConnection) {
         })
         .await;
 
-    let mut i: f32 = 0.0;
     let mut x = 0.0;
     let mut y = 0.0;
     let rate = 0.05;
@@ -82,6 +82,5 @@ async fn test_client(mut mm: matchmaker::MatchMakerConnection) {
         }
         conn.set_transform(id, render::Translation3::new(x, y, 0.0))
             .await;
-        i += 0.1;
     }
 }

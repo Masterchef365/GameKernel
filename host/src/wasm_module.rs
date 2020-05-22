@@ -46,7 +46,7 @@ impl WasmModule {
                 }),
 
                 "flush" => func!(|ctx: &mut Ctx, handle: Handle| {
-                    let (mem, rt) = unsafe { ctx.memory_and_data_mut::<RuntimeSupply<'static, 'static>>(0) };
+                    let (_, rt) = unsafe { ctx.memory_and_data_mut::<RuntimeSupply<'static, 'static>>(0) };
                     Maybe::encode(rt.sockman.flush(handle, rt.cx).map(|v| v.map(|_| 0)))
                 }),
 

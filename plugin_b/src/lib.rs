@@ -6,6 +6,9 @@ use libplugin::{debug, spawn, yield_now, AsyncReadExt, AsyncWriteExt, Socket};
 pub extern "C" fn main() {
     debug("Client init!");
     spawn(connect());
+    std::panic::set_hook(Box::new(|info| {
+        debug(&format!("{}", info));
+    }));
 }
 
 async fn connect() {
