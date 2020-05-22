@@ -21,14 +21,14 @@ fn main() -> Result<()> {
     spawner.spawn(plugin_a.task("plugin_a".into(), tx.clone()))?;
     */
 
+    /*
     let plugin_b = WasmModule::from_path("../target/wasm32-unknown-unknown/release/plugin_b.wasm")?;
     spawner.spawn(plugin_b.task("plugin_b".into(), tx.clone()))?;
+    */
 
-    /*
     for _ in 0..2_000 {
         spawner.spawn(test_client(tx.clone()))?;
     }
-    */
 
     spawner.spawn(vg_server(tx.clone(), spawner.clone()))?;
 

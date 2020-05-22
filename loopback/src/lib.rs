@@ -6,7 +6,7 @@ use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-const CHANNEL_CAP: usize = 1;
+const CHANNEL_CAP: usize = 32;
 
 pub struct Loopback {
     tx: Sender<Vec<u8>>,
@@ -57,20 +57,21 @@ impl AsyncWrite for Loopback {
 
         if Pin::new(&mut self.tx)
             .poll_ready(cx)
-            .map(|v| v.map_err(ncerror))?
+            .map_err(ncerror)?
             .is_pending()
         {
-            return Poll::Pending
+            return Poll::Pending;
         }
 
         let buf = std::mem::take(&mut self.tx_buf);
         Pin::new(&mut self.tx).start_send(buf).map_err(ncerror)?;
-
         Pin::new(&mut self.tx).poll_flush(cx).map_err(ncerror)
     }
 
-    fn poll_close(self: Pin<&mut Self>, _cx: &mut Context) -> Poll<Result<()>> {
-        Poll::Ready(Ok(())) //TODO
+    fn poll_close(mut self: Pin<&mut Self>, _cx: &mut Context) -> Poll<Result<()>> {
+        self.tx.close_channel();
+        self.rx.get_mut().close();
+        Poll::Ready(Ok(()))
     }
 }
 
@@ -82,14 +83,10 @@ impl AsyncRead for Loopback {
     ) -> Poll<Result<usize>> {
         if self.rx_buf.is_empty() {
             match self.rx.poll_next_unpin(cx) {
-                Poll::Ready(Some(buf)) => {
-                    self.rx_buf = buf;
-                }
+                Poll::Ready(Some(buf)) => self.rx_buf = buf,
+                Poll::Pending => return Poll::Pending,
                 Poll::Ready(None) => {
                     return Poll::Ready(Err(Error::from(io::ErrorKind::NotConnected)))
-                }
-                Poll::Pending => {
-                    return Poll::Pending;
                 }
             }
         }
