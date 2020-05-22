@@ -45,6 +45,11 @@ impl WasmModule {
                     Maybe::encode(rt.sockman.write(handle, buf.deref(mem, 0, len).unwrap(), rt.cx))
                 }),
 
+                "flush" => func!(|ctx: &mut Ctx, handle: Handle| {
+                    let (mem, rt) = unsafe { ctx.memory_and_data_mut::<RuntimeSupply<'static, 'static>>(0) };
+                    Maybe::encode(rt.sockman.flush(handle, rt.cx).map(|v| v.map(|_| 0)))
+                }),
+
                 "read" => func!(|ctx: &mut Ctx, handle: Handle, buf: WasmPtr<u8, Array>, len: u32| {
                     let (mem, rt) = unsafe { ctx.memory_and_data_mut::<RuntimeSupply<'static, 'static>>(0) };
                     Maybe::encode(rt.sockman.read(handle, buf.deref(mem, 0, len).unwrap(), rt.cx))

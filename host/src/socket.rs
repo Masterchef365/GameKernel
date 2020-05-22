@@ -150,6 +150,15 @@ impl SocketManager {
         }
     }
 
+    pub fn flush(&mut self, handle: Handle, cx: &mut Context) -> Poll<io::Result<()>> {
+        if let Some(socket) = self.sockets.get_mut(&handle) {
+            use futures::io::AsyncWrite;
+            Pin::new(socket).poll_flush(cx)
+        } else {
+            Poll::Ready(Err(io::Error::from(io::ErrorKind::NotFound)))
+        }
+    }
+
     /// Return the handles that are supposed to be awake
     pub fn wakes(&mut self, cx: &mut Context) -> Vec<Handle> {
         // Abuse poll_peek() to determine whether there is data behind a socket/listener and wake

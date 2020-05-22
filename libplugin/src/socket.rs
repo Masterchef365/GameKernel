@@ -16,6 +16,7 @@ extern "C" {
 
     fn read(handle: Handle, buffer: *mut u8, len: usize) -> Maybe;
     fn write(handle: Handle, buffer: *const u8, len: usize) -> Maybe;
+    fn flush(handle: Handle) -> Maybe;
 }
 
 pub struct Socket {
@@ -71,8 +72,9 @@ impl AsyncWrite for Socket {
         poll_ffi(ret, self.handle, cx).map(|v| v.map(|v| v as usize))
     }
 
-    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context) -> Poll<io::Result<()>> {
-        Poll::Ready(Ok(()))
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
+        let ret = unsafe { flush(self.handle) };
+        poll_ffi(ret, self.handle, cx).map(|v| v.map(|_| ()))
     }
 
     fn poll_close(self: Pin<&mut Self>, _cx: &mut Context) -> Poll<io::Result<()>> {
