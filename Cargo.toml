@@ -4,6 +4,7 @@ members = [
     "plugin_a",
     "plugin_b",
     "protocols",
+    "asteroids",
 ]
 exclude = [
     "host",

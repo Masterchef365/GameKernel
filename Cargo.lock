@@ -21,6 +21,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "asteroids"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "libplugin",
+ "render",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

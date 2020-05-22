@@ -7,7 +7,7 @@ pub extern "C" fn main() {
     debug("Client init!");
     spawn(connect());
     std::panic::set_hook(Box::new(|info| {
-        debug(&format!("{}", info));
+        debug(&info.to_string());
     }));
 }
 
