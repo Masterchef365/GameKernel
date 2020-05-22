@@ -7,7 +7,9 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 const CHANNEL_CAP: usize = 32;
+const MAX_BUFFER_SIZE: usize = 16384; // 16k is probably about the biggest message we want to have.
 
+/// An asynchronous loop back socket
 pub struct Loopback {
     tx: Sender<Vec<u8>>,
     tx_buf: Vec<u8>,
@@ -17,26 +19,30 @@ pub struct Loopback {
 }
 
 impl Loopback {
+    /// Create a pair of connected loopback sockets.
     pub fn pair() -> (Self, Self) {
         let (a_tx, b_rx) = channel(CHANNEL_CAP);
         let (b_tx, a_rx) = channel(CHANNEL_CAP);
-        (Loopback::new(a_tx, a_rx), Loopback::new(b_tx, b_rx))
+        (
+            Loopback::with_channels(a_tx, a_rx),
+            Loopback::with_channels(b_tx, b_rx),
+        )
     }
 
-    fn new(tx: Sender<Vec<u8>>, rx: Receiver<Vec<u8>>) -> Self {
+    /// Returns true if this loopback is ready for a read or a write.
+    pub fn has_data(&mut self, cx: &mut Context) -> bool {
+        !self.rx_buf.is_empty()
+            || Pin::new(&mut self.rx).poll_peek(cx).is_ready()
+            || Pin::new(&mut self.tx).poll_ready(cx).is_ready()
+    }
+
+    fn with_channels(tx: Sender<Vec<u8>>, rx: Receiver<Vec<u8>>) -> Self {
         Self {
             tx,
             rx: rx.peekable(),
             tx_buf: Vec::new(),
             rx_buf: Vec::new(),
         }
-    }
-
-    /// If this loopback has data ready for a read, send it.
-    pub fn has_data(&mut self, cx: &mut Context) -> bool {
-        !self.rx_buf.is_empty()
-            || Pin::new(&mut self.rx).poll_peek(cx).is_ready()
-            || Pin::new(&mut self.tx).poll_ready(cx).is_ready()
     }
 }
 
@@ -45,9 +51,13 @@ fn ncerror<T>(_: T) -> io::Error {
 }
 
 impl AsyncWrite for Loopback {
-    fn poll_write(mut self: Pin<&mut Self>, _cx: &mut Context, buf: &[u8]) -> Poll<Result<usize>> {
+    fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context, buf: &[u8]) -> Poll<Result<usize>> {
         self.tx_buf.extend_from_slice(buf);
-        Poll::Ready(Ok(buf.len()))
+        if self.tx_buf.len() > MAX_BUFFER_SIZE {
+            self.poll_flush(cx)?.map(|_| Ok(0))
+        } else {
+            Poll::Ready(Ok(buf.len()))
+        }
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<()>> {
