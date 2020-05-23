@@ -91,16 +91,43 @@ impl Renderer {
                 for (a, b, color) in object.data.iter() {
                     let a = object.transform.transform_point(a);
                     let b = object.transform.transform_point(b);
-                    window.draw_line(&a, &b, &color);
+                    window.draw_planar_line(&a, &b, &color);
                 }
             }
 
             // Wake up registered events
             for waiter in share.waiting_for_frame.drain(..) {
                 let mut keys = Vec::new();
-                for (key, response) in
-                    [(Key::W, 'W'), (Key::A, 'A'), (Key::S, 'S'), (Key::D, 'D')].iter()
-                {
+                const KEY_SET: [(Key, char); 27] = [
+                    (Key::A, 'A'),
+                    (Key::B, 'B'),
+                    (Key::C, 'C'),
+                    (Key::D, 'D'),
+                    (Key::E, 'E'),
+                    (Key::F, 'F'),
+                    (Key::G, 'G'),
+                    (Key::H, 'H'),
+                    (Key::I, 'I'),
+                    (Key::J, 'J'),
+                    (Key::K, 'K'),
+                    (Key::L, 'L'),
+                    (Key::M, 'M'),
+                    (Key::N, 'N'),
+                    (Key::O, 'O'),
+                    (Key::P, 'P'),
+                    (Key::Q, 'Q'),
+                    (Key::R, 'R'),
+                    (Key::S, 'S'),
+                    (Key::T, 'T'),
+                    (Key::U, 'U'),
+                    (Key::V, 'V'),
+                    (Key::W, 'W'),
+                    (Key::X, 'X'),
+                    (Key::Y, 'Y'),
+                    (Key::Z, 'Z'),
+                    (Key::Space, ' '),
+                ];
+                for (key, response) in KEY_SET.iter() {
                     match window.get_key(*key) {
                         Action::Press => keys.push(*response),
                         _ => (),
