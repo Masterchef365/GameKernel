@@ -5,24 +5,26 @@ mod host;
 pub use host::*;
 
 use futures::{AsyncRead, AsyncWrite, SinkExt, StreamExt};
-pub use nalgebra::{Point3, Point2, Translation2};
+pub use nalgebra::{Point3, Point2, Vector2, Vector3, Isometry2};
 use serde::{Deserialize, Serialize};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
 use tokio_util::compat::Compat;
 use tokio_util::compat::FuturesAsyncReadCompatExt;
 
-pub type Id = u64;
+pub type Line = (Point2<f32>, Point2<f32>, Point3<f32>);
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ObjectData {
-    pub data: Box<[(Point2<f32>, Point2<f32>, Point3<f32>)]>,
-    pub transform: Translation2<f32>,
+    pub data: Box<[Line]>,
+    pub transform: Isometry2<f32>,
 }
+
+pub type Id = u64;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Request {
     CreateObject(ObjectData),
-    SetObjectTranslation(Id, Translation2<f32>),
+    SetObjectTranslation(Id, Isometry2<f32>),
     DeleteObject(Id),
     WaitFrame,
 }
@@ -56,7 +58,7 @@ impl<S: AsyncRead + AsyncWrite + Unpin> RendererConn<S> {
         bincode::deserialize(&self.socket.next().await.unwrap().unwrap()).unwrap()
     }
 
-    pub async fn set_transform(&mut self, id: Id, transform: Translation2<f32>) {
+    pub async fn set_transform(&mut self, id: Id, transform: Isometry2<f32>) {
         self.socket
             .send(
                 bincode::serialize(&Request::SetObjectTranslation(id, transform))
