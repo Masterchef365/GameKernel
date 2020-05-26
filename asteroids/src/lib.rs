@@ -1,6 +1,9 @@
 mod objects;
 use futures::{AsyncRead, AsyncWrite};
 use libplugin::{debug, spawn, Socket};
+use rand::distributions::{Distribution, Uniform};
+use rand::rngs::SmallRng;
+use rand::SeedableRng;
 use render::{Id, Isometry2, Point2, Point3, RendererConn, Vector2};
 use std::any::Any;
 use std::collections::HashMap;
@@ -115,7 +118,7 @@ impl Ship {
 struct Bullet {
     pub position: Point2<f32>,
     pub velocity: Vector2<f32>,
-    pub life: u32,
+    pub duration: u32,
     pub render_id: Id,
 }
 
@@ -135,7 +138,7 @@ impl Bullet {
             render_id,
             position,
             velocity,
-            life: 90,
+            duration: 90,
         }
     }
 
@@ -148,7 +151,53 @@ impl Bullet {
         self.position = screen.wrap(self.position);
         conn.set_transform(self.render_id, Isometry2::new(self.position.coords, 0.0))
             .await;
-        self.life -= 1;
+        self.duration -= 1;
+    }
+}
+
+struct Asteroid {
+    pub position: Point2<f32>,
+    pub velocity: Vector2<f32>,
+    pub render_id: Id,
+    pub radius: f32,
+    pub life: u32,
+}
+
+impl Asteroid {
+    pub async fn new<S: AsyncRead + AsyncWrite + Unpin>(
+        conn: &mut RendererConn<S>,
+        position: Point2<f32>,
+        velocity: Vector2<f32>,
+        radius: f32,
+    ) -> Self {
+        let render_id = conn
+            .add_object(render::ObjectData {
+                data: objects::asteroid(radius),
+                transform: Isometry2::new(position.coords, 0.0),
+            })
+            .await;
+        Self {
+            radius,
+            render_id,
+            position,
+            velocity,
+            life: 5,
+        }
+    }
+
+    pub async fn update<S: AsyncRead + AsyncWrite + Unpin>(
+        &mut self,
+        conn: &mut RendererConn<S>,
+        screen: Box2D,
+    ) {
+        self.position += self.velocity;
+        self.position = screen.wrap(self.position);
+        conn.set_transform(self.render_id, Isometry2::new(self.position.coords, 0.0))
+            .await;
+    }
+
+    pub fn collides_with(&self, object: Point2<f32>) -> bool {
+        (self.position - object).magnitude() <= self.radius
     }
 }
 
@@ -168,9 +217,27 @@ async fn asteroids() {
         .await;
 
     let mut ship = Ship::new(&mut conn).await;
-    let mut bullets: Vec<Bullet> = Vec::new();
+    let mut bullets = Vec::new();
+    let mut asteroids = Vec::new();
 
-    loop {
+    let mut rng = SmallRng::seed_from_u64(3489277);
+    let pos = Uniform::new(-300.9, 300.0);
+    let size = Uniform::new(10.0, 60.0);
+    let vel = Uniform::new(0.1, 1.0);
+
+    for _ in 0..10 {
+        asteroids.push(
+            Asteroid::new(
+                &mut conn,
+                Point2::new(pos.sample(&mut rng), pos.sample(&mut rng)),
+                Vector2::new(vel.sample(&mut rng), vel.sample(&mut rng)),
+                size.sample(&mut rng),
+            )
+            .await,
+        );
+    }
+
+    'mainloop: loop {
         let info = conn.wait_frame().await;
         ship.update(
             &mut conn,
@@ -192,10 +259,54 @@ async fn asteroids() {
         }
         for bullet in &mut bullets {
             bullet.update(&mut conn, screen).await;
-            if bullet.life == 0 {
+            if bullet.duration == 0 {
                 conn.delete_object(bullet.render_id).await;
             }
         }
-        bullets.retain(|b| b.life > 0);
+        let mut new_roids = Vec::new();
+        for asteroid in &mut asteroids {
+            asteroid.update(&mut conn, screen).await;
+            if asteroid.collides_with(ship.position) {
+                debug("You died!");
+                break 'mainloop;
+            }
+            for bullet in &mut bullets {
+                if asteroid.collides_with(bullet.position) {
+                    bullet.duration = 0;
+                    conn.delete_object(bullet.render_id).await;
+                    asteroid.life -= 1;
+                }
+            }
+            if asteroid.life == 0 {
+                conn.delete_object(asteroid.render_id).await;
+                if asteroid.radius > 10.0 {
+                    new_roids.push(
+                        Asteroid::new(
+                            &mut conn,
+                            asteroid.position,
+                            asteroid.velocity / 2.0,
+                            asteroid.radius / 2.0,
+                        )
+                        .await,
+                    );
+                    new_roids.push(
+                        Asteroid::new(
+                            &mut conn,
+                            asteroid.position,
+                            asteroid.velocity / -2.0,
+                            asteroid.radius / 2.0,
+                        )
+                        .await,
+                    );
+                }
+            }
+        }
+        bullets.retain(|b| b.duration > 0);
+        asteroids.retain(|a| a.life > 0);
+        asteroids.extend(new_roids.drain(..));
+        if asteroids.is_empty() {
+            debug("You won!");
+            break 'mainloop;
+        }
     }
 }

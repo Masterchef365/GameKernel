@@ -11,3 +11,4 @@ crate-type = ["cdylib"]
 futures = "0.3"
 libplugin = { path = "../libplugin" }
 render = { path = "../render" }
+rand = { version = "0.7", features = ["small_rng"] }
