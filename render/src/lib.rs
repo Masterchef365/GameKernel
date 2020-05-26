@@ -5,7 +5,7 @@ mod host;
 pub use host::*;
 
 use futures::{AsyncRead, AsyncWrite, SinkExt, StreamExt};
-pub use nalgebra::{Point3, Point2, Vector2, Vector3, Isometry2};
+pub use nalgebra::{Isometry2, Point2, Point3, Vector2, Vector3};
 use serde::{Deserialize, Serialize};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
 use tokio_util::compat::Compat;
@@ -56,6 +56,18 @@ impl<S: AsyncRead + AsyncWrite + Unpin> RendererConn<S> {
             .await
             .unwrap();
         bincode::deserialize(&self.socket.next().await.unwrap().unwrap()).unwrap()
+    }
+
+    // TODO: Make this fallible
+    pub async fn delete_object(&mut self, id: Id) {
+        self.socket
+            .send(
+                bincode::serialize(&Request::DeleteObject(id))
+                    .unwrap()
+                    .into(),
+            )
+            .await
+            .unwrap();
     }
 
     pub async fn set_transform(&mut self, id: Id, transform: Isometry2<f32>) {

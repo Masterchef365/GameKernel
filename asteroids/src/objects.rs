@@ -17,7 +17,7 @@ pub fn rocket() -> Box<[Line]> {
     ])
 }
 
-pub fn shot() -> Box<[Line]> {
+pub fn bullet() -> Box<[Line]> {
     let color = Point3::new(0.0, 1.0, 1.0);
     let verices = [
         Point2::new(-2.0, 0.0),
