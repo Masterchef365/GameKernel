@@ -5,7 +5,7 @@ mod host;
 pub use host::*;
 
 use futures::{AsyncRead, AsyncWrite, SinkExt, StreamExt};
-pub use nalgebra::{Isometry2, Point2, Point3, Vector2, Vector3};
+pub use nalgebra::{Isometry2, Point2, Point3, Vector2, Vector3, Rotation2};
 use serde::{Deserialize, Serialize};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
 use tokio_util::compat::Compat;
@@ -36,6 +36,14 @@ pub struct RendererConn<S> {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FrameInfo {
     pub keys: Vec<char>,
+}
+
+impl ObjectData {
+    pub fn new(data: Box<[Line]>, transform: Isometry2<f32>) -> Self {
+        Self {
+            data, transform
+        }
+    }
 }
 
 impl<S: AsyncRead + AsyncWrite + Unpin> RendererConn<S> {

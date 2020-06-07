@@ -6,7 +6,8 @@ mod ffi {
 }
 
 #[cfg(target_arch = "wasm32")]
-pub fn debug(s: &str) {
+pub fn debug(s: impl AsRef<str>) {
+    let s = s.as_ref();
     unsafe { ffi::debug(s.as_ptr(), s.len()) }
 }
 

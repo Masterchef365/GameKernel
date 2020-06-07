@@ -4,7 +4,7 @@ use libplugin::{debug, spawn, Socket};
 use rand::distributions::{Distribution, Uniform};
 use rand::rngs::SmallRng;
 use rand::SeedableRng;
-use render::{Id, Isometry2, ObjectData, Point2, Point3, RendererConn, Vector2};
+use render::{Id, Isometry2, ObjectData, Point2, Point3, RendererConn, Vector2, Rotation2};
 use std::any::{Any, TypeId};
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -103,13 +103,18 @@ impl ECData {
 struct Renderable {
     id: Id,
     transform: Isometry2<f32>,
+    deleted: bool,
 }
 
 impl Renderable {
     pub async fn new(renderer: &mut RendererConn<Socket>, shape: ObjectData) -> Self {
         let transform = shape.transform;
         let id = renderer.add_object(shape).await;
-        Self { id, transform }
+        Self {
+            id,
+            transform,
+            deleted: false,
+        }
     }
 
     pub async fn set_transform(
@@ -125,21 +130,36 @@ impl Renderable {
         self.transform
     }
 
-    pub async fn delete(self, renderer: &mut RendererConn<Socket>) {
+    pub async fn delete(mut self, renderer: &mut RendererConn<Socket>) {
         renderer.delete_object(self.id).await;
+        self.deleted = true;
+    }
+}
+
+impl Drop for Renderable {
+    fn drop(&mut self) {
+        if !self.deleted {
+            panic!("Must explicitly delete renderable objects");
+        }
     }
 }
 
 struct Velocity(pub Vector2<f32>);
 
-async fn physics_system(ecs: &mut ECData, renderer: &mut RendererConn<Socket>) {
+async fn physics_system(ecs: &mut ECData, renderer: &mut RendererConn<Socket>, bounds: &Box2D) {
     let entities = ecs.with(&[TypeId::of::<Renderable>(), TypeId::of::<Velocity>()]);
     for entity in &entities {
         let velocity = ecs.get_component::<Velocity>(entity).unwrap().0;
         let rdr = ecs.get_component_mut::<Renderable>(entity).unwrap();
-        let mut iso = rdr.get_transform();
-        iso.translation.vector += velocity;
-        rdr.set_transform(renderer, iso).await;
+        let iso = rdr.get_transform();
+        let mut position: Point2<f32> = iso.translation.vector.into();
+        position += velocity;
+        let position = bounds.wrap(position);
+        rdr.set_transform(
+            renderer,
+            Isometry2::new(position.coords, iso.rotation.angle()),
+        )
+        .await;
     }
 }
 
@@ -195,24 +215,22 @@ pub extern "C" fn main() {
 struct Ship;
 
 impl Ship {
-    pub async fn new(ecs: &mut ECData, renderer: &mut RendererConn<Socket>) {
+    pub async fn new(ecs: &mut ECData, renderer: &mut RendererConn<Socket>) -> EntityId {
         let id = ecs.new_entity();
-        let shape = render::ObjectData {
-            data: objects::rocket(),
-            transform: Isometry2::identity(),
-        };
+        let shape = render::ObjectData::new(objects::rocket(), Isometry2::identity());
         ecs.add_component(&id, Renderable::new(renderer, shape).await);
         ecs.add_component(&id, Velocity(Vector2::new(0.0, 0.0)));
         ecs.add_component(&id, Ship);
+        id
     }
 
     pub async fn system(
         ecs: &mut ECData,
         renderer: &mut RendererConn<Socket>,
-        screen: Box2D,
         fire_engine: bool,
         left_key: bool,
         right_key: bool,
+        fire_laser: bool,
     ) {
         let ships = ecs.with(&[
             TypeId::of::<Ship>(),
@@ -232,17 +250,71 @@ impl Ship {
                 angle -= ROT_RATE;
             }
 
+            rdr.set_transform(renderer, Isometry2::new(transform.translation.vector, angle)).await;
+
+            let direction = Vector2::new(angle.cos(), angle.sin());
+
             const ACCEL: f32 = 0.1;
             let acceleration = if fire_engine {
-                Vector2::new(ACCEL * angle.cos(), ACCEL * angle.sin())
+                direction * ACCEL
             } else {
                 Vector2::new(0.0, 0.0)
             };
 
-            let position = screen.wrap(transform.translation.vector.into());
-            rdr.set_transform(renderer, Isometry2::new(position.coords, angle))
+            let velocity = &mut ecs.get_component_mut::<Velocity>(ship).unwrap().0;
+            *velocity += acceleration;
+            let velocity = *velocity;
+
+            if fire_laser {
+                Bullet::new(
+                    ecs,
+                    renderer,
+                    transform.translation.vector.into(),
+                    velocity + (direction * 8.0),
+                )
                 .await;
-            ecs.get_component_mut::<Velocity>(ship).unwrap().0 += acceleration;
+            }
+        }
+    }
+}
+
+struct Bullet {
+    pub duration: u32,
+}
+
+impl Bullet {
+    pub async fn new(
+        ecs: &mut ECData,
+        renderer: &mut RendererConn<Socket>,
+        position: Point2<f32>,
+        velocity: Vector2<f32>,
+    ) -> EntityId {
+        let id = ecs.new_entity();
+        let shape = render::ObjectData::new(
+            objects::bullet(),
+            Isometry2::translation(position.x, position.y),
+        );
+        ecs.add_component(&id, Renderable::new(renderer, shape).await);
+        ecs.add_component(&id, Velocity(velocity));
+        ecs.add_component(&id, Bullet { duration: 90 });
+        id
+    }
+
+    pub async fn system(ecs: &mut ECData, renderer: &mut RendererConn<Socket>) {
+        let bullets = ecs.with(&[
+            TypeId::of::<Bullet>(),
+            TypeId::of::<Renderable>(),
+        ]);
+        for bullet in &bullets {
+            let data = ecs.get_component_mut::<Bullet>(bullet).unwrap();
+            data.duration -= 1;
+            if data.duration <= 0 {
+                ecs.remove_component::<Renderable>(bullet)
+                    .unwrap()
+                    .delete(renderer)
+                    .await;
+                ecs.delete_entity(bullet);
+            }
         }
     }
 }
@@ -267,22 +339,18 @@ async fn asteroids() {
         Ship::system(
             &mut ecs,
             &mut renderer,
-            screen,
             info.keys.contains(&'W'),
             info.keys.contains(&'A'),
             info.keys.contains(&'D'),
+            info.keys.contains(&' '),
         )
         .await;
-        physics_system(&mut ecs, &mut renderer).await;
+        Bullet::system(&mut ecs, &mut renderer).await;
+        physics_system(&mut ecs, &mut renderer, &screen).await;
     }
 }
 
 /*
-   struct Bullet {
-   pub duration: u32,
-   pub render_id: Id,
-}
-
 impl Bullet {
 pub async fn new<S: AsyncRead + AsyncWrite + Unpin>(
 renderer: &mut RendererConn<S>,
