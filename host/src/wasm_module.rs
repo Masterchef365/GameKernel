@@ -1,8 +1,8 @@
 use anyhow::Result;
 use futures::channel::mpsc::Sender;
 use futures::future::poll_fn;
-use game_kernel::matchmaker::Request;
-use game_kernel::socket::SocketManager;
+use host::matchmaker::Request;
+use host::socket::SocketManager;
 use protocols::*;
 use std::ffi::c_void;
 use std::fs::File;

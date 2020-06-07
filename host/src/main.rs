@@ -4,7 +4,7 @@ use anyhow::{format_err, Result};
 use futures::executor::ThreadPool;
 use futures::task::SpawnExt;
 use futures::{SinkExt, StreamExt};
-use game_kernel::matchmaker::{self, MatchMakerConnection};
+use host::matchmaker::{self, MatchMakerConnection};
 use std::error::Error;
 use std::fs::{create_dir, read_dir};
 use std::path::Path;
